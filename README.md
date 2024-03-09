@@ -1,0 +1,24 @@
+# USGS Oregon Lake Profile Analysis Tool
+Harmful algal blooms (HABs) have occurred in many of the large water storage reservoirs in the Willamette River Basin, resulting in health advisories 
+for water contact recreation and drinking water due to the presence of cyanobacteria toxins (cyanotoxins). In 2018 for the first time in Oregon, c
+yanotoxins from a HAB in Detroit Lake affected the State capital of Salem's drinking water for about a month. Similar types of cyanobacterial blooms 
+occur in Blue River and Cougar Reservoirs, in the McKenzie River Basin, with similar threats to drinking water for the City of Eugene.
+
+To address this issue, and to complement on-going limnological surveys, the USGS partnered with the City of Salem, the Eugene Water and Electric Board, 
+and the U.S. Army Corp of Engineers to monitor algal blooms in Detroit Lake, Blue River Lake, and Cougar Lake - and the downstream rivers - using 
+continuous water-quality monitors that transmit data to water treatment plant operators, dam operations, researchers and the public in near real-time. 
+Water quality parameters, including water temperature, conductance, turbidity, and HAB parameters are collected vertically in the reservoirs every meter 
+for the top 10 meters, then every 5 meters down to 30 meters depth. HAB parameters include surrogates for algal biomass (fluorescence of total 
+chlorophyll [fCHL] and blue-green pigment phycocyanin [fPC]), and indicators of photosynthetic activity (dissolved oxygen and pH). Fluorescing dissolved 
+organic matter [fDOM] -- a reliable surrogate for dissolved organic carbon, an important parameter for water treatment -- is also collected at each depth. 
+
+This tool displays HAB parameters include surrogates for algal biomass (fluorescence of total chlorophyll [fCHL] and blue-green pigment phycocyanin [fPC]), 
+indicators of photosynthetic activity (dissolved oxygen and pH). Fluorescing dissolved organic matter [fDOM] -- a reliable surrogate for dissolved organic 
+carbon, an important parameter for water treatment -- is also collected at each depth. These parameters are monitored hourly at the surface (~1-meter depth) 
+and through the top portion of the water column multiple times per day from locations near the dam (at the log booms). 
+
+Data are available (per parameter) as: Profiles with a slider scale to portray conditions with depth over time; Time-series plots, based on the hourly data 
+collected at 1-meter depth; and in Contours, color plots of parameter values by depth over time. When taken together with the downstream continuous 
+water-quality monitors these data provide an early-warning indicator of an algal bloom in the reservoir, or the possible release and transport of algae 
+downstream to drinking-water intakes. These data also provide insights into the evolution, behavior, and decay of the seasonal blooms which can inform 
+management strategies, modeling, and perhaps prediction of blooms in the future. 
