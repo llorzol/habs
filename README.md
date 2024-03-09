@@ -12,7 +12,7 @@ for the top 10 meters, then every 5 meters down to 30 meters depth. HAB paramete
 chlorophyll [fCHL] and blue-green pigment phycocyanin [fPC]), and indicators of photosynthetic activity (dissolved oxygen and pH). Fluorescing dissolved 
 organic matter [fDOM] -- a reliable surrogate for dissolved organic carbon, an important parameter for water treatment -- is also collected at each depth. 
 
-This tool displays HAB parameters include surrogates for algal biomass (fluorescence of total chlorophyll [fCHL] and blue-green pigment phycocyanin [fPC]), 
+This tool displays HAB parameters including surrogates for algal biomass (fluorescence of total chlorophyll [fCHL] and blue-green pigment phycocyanin [fPC]), 
 indicators of photosynthetic activity (dissolved oxygen and pH). Fluorescing dissolved organic matter [fDOM] -- a reliable surrogate for dissolved organic 
 carbon, an important parameter for water treatment -- is also collected at each depth. These parameters are monitored hourly at the surface (~1-meter depth) 
 and through the top portion of the water column multiple times per day from locations near the dam (at the log booms). 
