@@ -1,0 +1,88 @@
+<!--
+ * version 3.05
+ * March 8, 2024
+-->
+<span id="helpIntro">
+<p class="fs-6 mb-3">
+This web page provides access to current and historic water-quality data collected at two
+monitoring locations. Each of these parameters is monitored hourly at the surface (~1-meter depth)
+and through the water column multiple times per day from locations near dam (at the log booms).
+Data are available (per parameter) as: Profiles with a slider scale to portray conditions with
+depth over time; Time-series plots, based on the hourly data collected at 1-meter depth; and
+in Contours, color plots of parameter values by depth over time.
+</p> 
+</span>
+
+<span id="profileIntro">
+<p class="fs-6 mb-3">
+The following panels show water-quality information plotted by depth through time.
+Use the cursor to click for another date on the time-line below each graph. All the panels will
+set to the specific chosen date.
+</p> 
+</span>
+
+<span id="sliderText">
+<p class="fs-6 mb-3">
+  <div class="form-check">
+    <input id="sliderChecked" type="checkbox" class="lockSlider form-check-input pe-2" checked>
+    <label class="form-check-label ps-2 pe-2" for="sliderChecked">Lock Graphs</label>
+    <span id="dateLabel">Current Date: <span id="currentDate" class="fw-bold"></span>
+  </div>
+</p> 
+</span>
+
+<span id="contourIntro">
+<p class="fs-6 mb-3">
+The following panels show color plots of parameter values by depth over time.
+</p> 
+</span>
+
+<span id="timeseriesIntro">
+<p class="fs-6 mb-3">
+The following panels show parameter values collected hourly at 1-meter depth over time.
+</p> 
+</span>
+
+<span id="showAllData">
+<p class="fs-6 mb-5">
+All available data collected have been shown in each panel.
+<span id="availableRecord"></span> Beware there can be gaps where
+data were not collected due to equipment failure and other conditions.
+</p> 
+</span>
+
+<span id="showLessData">
+<p class="fs-6 mb-5">
+The default number of <span id="defaultDays"></span> days has been shown in each panel, but
+less data have been collected. <span id="availableRecord"></span> Beware there can be gaps where
+data were not collected due to equipment failure and other conditions. 
+</p> 
+</span>
+
+<span id="showMoreData">
+<p class="fs-6 mb-5">
+Currently the default number of <span id="defaultDays"></span> days has been shown in each panel, but
+more data have been collected. <span id="availableRecord"></span> Beware there can be gaps where
+data were not collected due to equipment failure and other conditions. 
+<br><br>
+The following steps can be taken to display more data.
+However; these steps could fail to show greater amounts of data due to a slow internet,
+type of browser, or type of computer. If so please reduce the number of days in the URL address
+and refresh the web page.
+<br>
+<span id="moreDataLink"></span>
+</p> 
+</span>
+
+<span id="disclaimer">
+<p class="fs-6 mb-3">
+Users are cautioned to consider the nature of the information presented here before making decisions 
+using it that concern personal or public safety or the conduct of business that concerns substantial 
+monetary or operational consequences. Although these data have been processed successfully on a computer 
+system at the U.S. Geological Survey (USGS), no warranty expressed or implied is made regarding the display 
+or utility of the data on any other system or for general or scientific purposes, nor shall the act of 
+distribution constitute any such warranty. The USGS or the U.S. Government shall not be held liable for 
+improper or incorrect use of the data described and/or contained herein.
+</p> 
+</span>
+ 
