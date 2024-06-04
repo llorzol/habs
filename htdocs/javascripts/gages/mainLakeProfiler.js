@@ -3,8 +3,8 @@
  * Main is a JavaScript library to graph NwisWeb information
  * for a site(s).
  *
- * version 3.10
- * March 16, 2024
+ * version 3.12
+ * June 3, 2024
  */
 
 /*
@@ -60,65 +60,94 @@ var lsdelev;
 var lsdaccuracy;
 var lsdelevdatum;
 
+var message = "Need a NWIS USGS site number, which is a number ";
+message    += "consisting of 15 digits (example 433152121281301). ";
+
 // Prepare when the DOM is ready
 //
-$(document).ready(function() {
+$(document).ready(function()
+ {
+   // Current url
+   //-------------------------------------------------
+   var url     = new URL(window.location.href);
+   console.log("Current Url " + window.location.href);
 
-    //$("#footer").show();
+   // Parse
+   //-------------------------------------------------
+   site         = url.searchParams.get('site');
+   site_no      = url.searchParams.get('site_no');
+   numberOfDays = url.searchParams.get('numberOfDays');
+   startingDate = url.searchParams.get('startingDate');
+   endingDate   = url.searchParams.get('endingDate');
+   console.log(`Site ${site}`);
+   console.log(`Site_no ${site_no}`);
+   console.log(`startingDate ${startingDate}`);
+   console.log(`endingDate ${endingDate}`);
 
-    // Parse
-    //-------------------------------------------------
-    if (jQuery.url.param("site")) {
-        site_no = jQuery.url.param("site");
-    } else if (jQuery.url.param("site_no")) {
-        site_no = jQuery.url.param("site");
-    }
-    if (jQuery.url.param("numberOfDays")) {
-        numberOfDays = jQuery.url.param("numberOfDays");
-    }
-    if (jQuery.url.param("startingDate")) {
-        startingDate = jQuery.url.param("startingDate");
-    }
-    if (jQuery.url.param("endingDate")) {
-        endingDate = jQuery.url.param("endingDate");
-    }
-    //console.log(startingDate);
-    //console.log(endingDate);
+   // Check arguments
+   //-------------------------------------------------
+   if(site)
+     {
+       if(!checkSiteNo(site))
+          {
+            openModal(message);
+            fadeModal(6000);
+            return;
+          }
+       site_no = site;
+     }
 
-    // Message specify site number
-    //
-    if(!site_no)
-    {
-        
-        message = "Please specify a site number";
-        openModal(message);
+   else if(site_no)
+     {
+       if(!checkSiteNo(site_no))
+          {
+            openModal(message);
+            fadeModal(6000);
+            return;
+          }
+     }
 
-        fadeModal(2000);
+   else {
 
-        return;
-    }
+     // Loading message
+     //
+     openModal(message);
+     fadeModal(3000);
+   }
+
+   if (numberOfDays) {
+     if(!checkNumber(numberOfDays)) { return null; }
+   }
+
+   if (startingDate) {
+     if(!checkDate(startingDate)) { return null; }
+   }
+
+   if (endingDate) {
+     if(!checkDate(endingDate)) { return null; }
+   }
                   
-    // Message specify startingDate or endingDate
-    //
-    if (startingDate && !endingDate) {
+   // Message specify startingDate or endingDate
+   //
+   if (startingDate && !endingDate) {
 
-        message = "Please specify an endingDate argument &endingDate=xxx";
-        openModal(message);
+     message = "Please specify an endingDate argument &endingDate=YYYY-MM-DD";
+     openModal(message);
 
-        fadeModal(2000);
+     fadeModal(6000);
 
-        return;
-    }
+     return;
+   }
 
-    if (!startingDate && endingDate) {
+   if (!startingDate && endingDate) {
 
-        message = "Please specify an startingDate argument &startingDate=xxx";
-        openModal(message);
+     message = "Please specify an startingDate argument &startingDate=YYYY-MM-DD";
+     openModal(message);
 
-        fadeModal(2000);
+     fadeModal(6000);
 
-        return;
-    }
+     return;
+   }
    
    message = "Requesting general site information and  water-quality measurements for site " + site_no;
    openModal(message);
@@ -140,10 +169,23 @@ $(document).ready(function() {
    // Web request
    //
    webRequests.push($.ajax( {
-                             method:   request_type,
-                             url:      script_http, 
-                             data:     data_http, 
-                             dataType: dataType
+     method:   request_type,
+     url:      script_http,
+     data:     data_http, 
+     dataType: dataType,
+     success: function (myData) {
+         message = "Processed current conditions information";
+         openModal(message);
+         fadeModal(2000);
+         myDataInfo   = parseIvRDB(myData);
+         myParameters = myDataInfo.myParameterData;
+     },
+     error: function (error) {
+       message = `Failed to load current conditions information ${error}`;
+       openModal(message);
+       fadeModal(2000);
+       return false;
+     }
    }));
 
    // Request for period of record information
@@ -157,82 +199,35 @@ $(document).ready(function() {
    // Web request
    //
    webRequests.push($.ajax( {
-                             method:   request_type,
-                             url:      script_http, 
-                             data:     data_http, 
-                             dataType: dataType
+     method:   request_type,
+     url:      script_http,
+     data:     data_http, 
+     dataType: dataType,
+     success: function (myData) {
+         message = "Processed period of record information";
+         openModal(message);
+         fadeModal(2000);
+         myDataInfo = parseSitePorRDB(myData);
+         //console.log('myDataInfo');
+         //console.log(myDataInfo);
+         myParmInfo  = myDataInfo.myData[site_no];
+         //console.log('myParmInfo');
+         //console.log(myParmInfo);
+         mySiteInfo  = myDataInfo.siteInfo[site_no];
+         //console.log('mySiteInfo');
+         //console.log(mySiteInfo);
+     },
+     error: function (error) {
+       message = `Failed to load period of record information ${error}`;
+       openModal(message);
+       fadeModal(2000);
+       return false;
+     }
    }));
 
    // Run ajax requests
    //
-   var j       = 0;
    $.when.apply($, webRequests).then(function() {
-        //console.log('Responses');
-        //console.log("Responses length " + arguments.length);
-        //console.log(arguments);
-
-        // Retrieve site information
-        //
-        var i = 0;
-        if(arguments.length > 0)
-          {
-           var myInfo  = arguments[i];
-           //console.log("arguments " + i);
-           //console.log(arguments[i]);
-
-           if(myInfo[1] === "success")
-             {
-              // Processing current conditions information";
-              //
-              myDataInfo   = parseIvRDB(myInfo[0]);
-              myParameters = myDataInfo.myParameterData;
-              //console.log('myParameters');
-              //console.log(myParameters);
-             }
-            else
-             {
-              // Loading message
-              //
-              message = "Failed to load current conditions information";
-              openModal(message);
-              fadeModal(2000);
-              return false;
-             }
-          }
-
-        // Retrieve period of record information
-        //
-        i++;
-        //console.log("Retrieve period of record information ");
-        //console.log(arguments[i]);
-        if(arguments.length > i)
-          {
-           var myInfo = arguments[i];
-
-           if(myInfo[1] === "success")
-             {
-              // Processing period of record information
-              //
-              myDataInfo = parseSitePorRDB(myInfo[0]);
-              //console.log('myDataInfo');
-              //console.log(myDataInfo);
-              myParmInfo  = myDataInfo.myData[site_no];
-              //console.log('myParmInfo');
-              //console.log(myParmInfo);
-              mySiteInfo  = myDataInfo.siteInfo[site_no];
-              //console.log('mySiteInfo');
-              //console.log(mySiteInfo);
-             }
-            else
-             {
-              // Loading message
-              //
-              message = "Failed to load period of record information";
-              openModal(message);
-              fadeModal(2000);
-              return false;
-             }
-          }
 
         // Web request
         //
