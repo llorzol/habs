@@ -3,8 +3,8 @@
  * Main is a JavaScript library to graph NwisWeb information
  * for a site(s).
  *
- * version 3.12
- * June 3, 2024
+ * version 3.13
+ * June 4, 2024
  */
 
 /*
@@ -60,8 +60,9 @@ var lsdelev;
 var lsdaccuracy;
 var lsdelevdatum;
 
-var message = "Need a NWIS USGS site number, which is a number ";
-message    += "consisting of 15 digits (example 433152121281301). ";
+var message = "Incorrectly formatted USGS site number: ";
+message    += "You must use the USGS station numbers, which are a number ";
+message    += "from 8 to 15 digits long (example 433152121281301). ";
 
 // Prepare when the DOM is ready
 //
@@ -174,9 +175,9 @@ $(document).ready(function()
      data:     data_http, 
      dataType: dataType,
      success: function (myData) {
-         message = "Processed current conditions information";
-         openModal(message);
-         fadeModal(2000);
+         //message = "Processed current conditions information";
+         //openModal(message);
+         //fadeModal(2000);
          myDataInfo   = parseIvRDB(myData);
          myParameters = myDataInfo.myParameterData;
      },
@@ -204,9 +205,9 @@ $(document).ready(function()
      data:     data_http, 
      dataType: dataType,
      success: function (myData) {
-         message = "Processed period of record information";
-         openModal(message);
-         fadeModal(2000);
+         //message = "Processed period of record information";
+         //openModal(message);
+         //fadeModal(2000);
          myDataInfo = parseSitePorRDB(myData);
          //console.log('myDataInfo');
          //console.log(myDataInfo);
@@ -414,6 +415,10 @@ function callWqService(mySiteInfo, myParameters, myParmInfo) {
 function lakeProfilerService(dataRDB) {
     //console.log("lakeProfilerService");
     //console.log(dataRDB);
+   
+   //closeModal();
+   message = "Processing water-quality measurements for site " + site_no;
+   updateModal(message);
 
     // Check for error
     //
