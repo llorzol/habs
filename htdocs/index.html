@@ -1,4 +1,12 @@
 <!DOCTYPE html>
+
+<!-- 
+ $Id: index.html, v 1.07 2025/11/29 14:01:50 llorzol Exp $
+ $Revision: 1.07 $
+ $Date: 2025/11/29 14:01:50 $
+ $Author: llorzol $
+ -->
+
 <html lang="en">
   <head>
     <title>USGS Oregon Water Science Center &ndash; Lake Studies</title>
@@ -21,15 +29,15 @@
   <div id="about" class="container">
 
      <!-- Page Heading/Breadcrumbs -->
-     <div class="row">
+     <div class="row mt-5">
        <div class="col-sm-12">
-         <div class="clear title title_top">U.S. Geological Survey</div>
-         <div class="clear title title_1">
-           <a href="https://www.usgs.gov/centers/oregon-water-science-center">
-             <div class="clear title title_1">Oregon Water Science Center</div>
+         <div class="clear fs-3 fw-bold text-black mt-2">U.S. Geological Survey</div>
+         <div>
+           <a class="clear fs-4 fw-bold text-black text-decoration-none mt-2" href="https://www.usgs.gov/centers/oregon-water-science-center">
+             <div>Oregon Water Science Center</div>
            </a>
          </div>
-         <div class="clear title fs-2 mt-3"><span id="site_text">Lake Studies</span></div>
+         <div class="clear fs-2 fw-bold text-black mt-3"><span id="site_text">Lake Studies</span></div>
        </div>
      </div>
      <!-- End Page Heading/Breadcrumbs -->
@@ -48,19 +56,20 @@
 
     <!-- Supporting scripts  -->
     <script src="javascripts/required/jquery.min.js"></script>
-    <script src="javascripts/required/jquery.url.js"></script>
     <script src="javascripts/required/bootstrap.min.js"></script>
     <script src="javascripts/required/dayjs.min.js"></script>
 
     <!-- d3 scripts -->
-    <script language="javascript" type="text/javascript" src="javascripts/required/d3.min.js"></script>
-    <script language="javascript" type="text/javascript" src="javascripts/required/d3.button.js"></script>
+    <script src="javascripts/required/d3.min.js"></script>
+    <script src="javascripts/required/d3.button.js"></script>
+    <script src="javascripts/required/d3-simple-slider.min.js"></script>
+
+    <!-- log4js -->
+    <script src="javascripts/required/loglevel.min.js"></script>
 
     <!-- Local scripts -->
     <script src="javascripts/gages/urlArguments.js"></script>
     <script src="javascripts/gages/modal.js"></script>
-    <script src="javascripts/gages/modal.js"></script>
-    <script src="javascripts/gages/helpTips.js"></script>
     <script src="javascripts/gages/webRequest.js"></script>
     <script src="javascripts/gages/webServices.js"></script>
     <script src="javascripts/gages/d3.AxisFunctions.js"></script>
