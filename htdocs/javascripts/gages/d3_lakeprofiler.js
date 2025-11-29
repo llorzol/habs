@@ -4,8 +4,11 @@
  * D3_lakeprofiler is a JavaScript library to provide a set of functions to build
  *  the Lake Profiler Web Site.
  *
- * version 3.16
- * April 6, 2024
+ $Id: d3_lakeprofiler.js,v 4.04 2025/10/18 09:25:59 llorzol Exp $
+ $Revision: 4.04 $
+ $Date: 2025/10/18 09:25:59 $
+ $Author: llorzol $
+ *
  */
 // https://www.google.com/search?source=hp&ei=FJmWXueWLJHV-gSx5ZuwAQ&q=d3+change+color+of+line+segments&oq=d3+change+color+of+line+seg&gs_lcp=CgZwc3ktYWIQARgAMggIIRAWEB0QHjoOCAAQ6gIQtAIQmgEQ5QI6BQgAEIMBOgIIADoECAAQAzoFCAAQzQI6BggAEBYQHkotCBcSKTE5N2cxMDJnOTJnODBnODRnODNnMTA3Zzg1Zzg1ZzgxZzcyZzg1ZzgzSh0IGBIZMWcxZzFnMWcxZzFnMWcxZzFnMWc1ZzVnOFC-RVictAFgyMwBaABwAHgAgAGbAYgBuQ-SAQQyNy4xmAEAoAEBqgEHZ3dzLXdperABBg&sclient=psy-ab
 // https://stackoverflow.com/questions/24442030/how-do-i-color-line-segments-between-specific-points-in-a-d3-line-plot
@@ -49,6 +52,10 @@ const tooltip = d3
       .append("div")
       .attr("class", 'position-absolute bg-light text-start fs-6 fw-bold shadow p-1 m-2 border border-1 border-dark rounded-3');
 
+// Set format of dates for tooltip
+//
+const formatDate = d3.timeFormat("%b %d, %Y");
+
 /** Wrapper for renderGraphs. Encapsulates global variables to avoid any side effects.
  * @param {object} myHash - Incoming raw data from API (default rdb format).
  * @param {string} agency_cd - Agency that published the data.
@@ -56,8 +63,8 @@ const tooltip = d3
  * @param {string} station_nm - Name of gage, station, or sensor site.
  */
 function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
-    //console.log('plotLakeProfile myHash');
-    //console.log(myHash);
+    myLogger.info('plotLakeProfile myHash');
+    myLogger.info(myHash);
    
     message = `Plotting water-quality measurements for site ${station_nm}`;
     openModal(message);
@@ -73,6 +80,10 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
         '00400',
         '32295'
     ]
+
+    /** Preferred colors for Approved/Provisional records */
+    //
+    const qualifiers = { 'Approved' : 'blue', 'Provisional' : 'orange' }
 
     /** d3 parameters */
     var y_box_min = 75;
@@ -102,21 +113,23 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
      */
     function renderGraphs(rawData, agency, siteNumber, siteName) {
 
-        var myParameterData = rawData.myParameterData;
-        var myData = rawData.myData;
-        var myTimeSeries = {};
-        var numberRe = new RegExp(/^(\d+)_(\d+)$/);
-        var qualifierRe = new RegExp(/_*(\D+)$/);
+        let myParameterData = rawData.myParameterData;
+        let myData = rawData.myData;
+        let myTimeSeries = {};
+        let numberRe = new RegExp(/^(\d+)_(\d+)$/);
+        let qualifierRe = new RegExp(/_*(\D+)$/);
 
-        //console.log(`Specified requested dates from ${rawData.startingDate} to ${rawData.endingDate} [${maxUserDays} days]`);
+        //myLogger.info(`Specified requested dates from ${rawData.startingDate} to ${rawData.endingDate} [${maxUserDays} days]`);
+        myLogger.info(`Data`);
+        myLogger.info(myData);
 
         startingDate = dayjs(rawData.startingDate).format('MMM DD, YYYY');
         endingDate   = dayjs(rawData.endingDate).format('MMM DD, YYYY');
-        //console.log(`Specified requested dates from ${startingDate} to ${endingDate} [${maxUserDays} days]`);
+        //myLogger.info(`Specified requested dates from ${startingDate} to ${endingDate} [${maxUserDays} days]`);
         
         startingPorDate = dayjs(startingPorDate).format('MMM DD, YYYY');
         endingPorDate   = dayjs(endingPorDate).format('MMM DD, YYYY');
-        //console.log(`Available dates from ${startingPorDate} to ${endingPorDate} [${maxDays} days]`);
+        //myLogger.info(`Available dates from ${startingPorDate} to ${endingPorDate} [${maxDays} days]`);
 
         availableRecord = `The available record spans a period from ${startingPorDate} to ${endingPorDate} and covers ${maxDays} days.`
         moreDataLink    = `<a href="/habs/lakeprofiler.html?site=${siteNumber}&numberOfDays=${maxDays}" target="_blank">View ${maxDays} days of data</a>`;
@@ -130,164 +143,115 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
 
         // Build parameter order for panels
         //
-        console.log('myParameterData')
-        console.log(myParameterData)
+        myLogger.info('myParameterData')
+        myLogger.info(myParameterData)
         
-        // Extract depth timeseries for profile and contour panels
-        //
-        var DepthSeries  = {};
-        let profilesDescriptionRe   = /Variable Depth Profile Data/;
-        let timeseriesDescriptionRe = /\[1 Meter Below The Surface\]/;
-        let depthDescriptionRe      = /^Depth of sensor below water surface/;
-        
-        let myTsIdList = jQuery.map(myParameterData, function(element, index) {
-            let myDescription = myParameterData[index].description;
-            if (profilesDescriptionRe.test(myDescription) && depthDescriptionRe.test(myDescription)) {
-                let myRecords   = myData[index];
-
-                // Loop through parameter codes and datetime
-                //
-                for (let myRecord of myRecords) {
-                    let myDate      = Date.parse(myRecord.date);
-                    let myValue     = myRecord.value;
-
-                    DepthSeries[myDate] = +myValue;
-                }
-            }
-            else if (depthDescriptionRe.test(myDescription)) {
-                let nothing = 'nothing';
-            }
-            else {
-
-                return index;
-            }
-        });
-        
-        //console.log(`myTsIdList`);
-        //console.log(myTsIdList);
-        //console.log(DepthSeries);
-
         // Loop through record extracting specific fields
         //
         // Extract time-series set and reformat data to make it more copasetic for d3
         // data = An array of objects
         // concentrations = An array of three objects, each of which contains an array of objects
         //
-        var Profiles    = [];
-        var TimeSeries  = [];
-        var Contours    = [];
+        let myTsIdList  = Object.keys(myParameterData);
+        let DepthSeries = {};
+        let Profiles    = [];
+        let TimeSeries  = [];
+        let Contours    = [];
         let firstDropDate = null;
         let lastDropDate = null;
         let firstSeriesDate = null;
         let lastSeriesDate = null;
+        let profilesDescriptionRe   = /Variable Depth Profile Data/;
+        let timeseriesDescriptionRe = /\[1 Meter Below The Surface\]/;
         
         for (let tsID of myTsIdList) {
+           
+            let description     = myParameterData[tsID].parameter_description;
+            let param_cd        = myParameterData[tsID].parameter;
+            let unit_of_measure = myParameterData[tsID].unit_of_measure;
+            let seriesType      = myParameterData[tsID].seriesType;
             
-            let description = myParameterData[tsID].description;
-            let param_cd    = myParameterData[tsID].parm_cd;
-            var myRecords   = myData[tsID];
-            var numRecords  = myRecords.length;
-            //console.log(`tsID ${tsID} parameter ${param_cd} description ${description} Records ${numRecords}`);
-            //console.log(`Parameter ${paramOrder.indexOf(param_cd)}`);
+            let myTsId          = myParameterData[tsID].tsid;
+            if(!paramOrder.includes(param_cd)) { continue; }
 
-            // Loop through parameter codes and datetime
-            //
-            myTimeSeries = [];
-            
-            for (let myRecord of myRecords) {
-                let myDate      = myRecord.date;
-                let myValue     = myRecord.value;
-                let myQualifier = myRecord.qualifier;
-                let myDateTime  = Date.parse(myDate);
+            myLogger.info(`guID ${tsID} tsID ${myTsId} seriesType ${seriesType}`)
 
-                if(myValue) { myValue = +myValue; }
+            if (['profile', 'timeseries'].includes(seriesType)) {
+                let myTimeSeries = myParameterData[tsID].data;
+                let numRecords   = myTimeSeries.length;
+                if (seriesType === 'profile') {
+                    let myDescription = description.replace(profilesDescriptionRe, "")
+                    Profiles[paramOrder.indexOf(param_cd)] = {
+                        tsid: tsID,
+                        description: myDescription,
+                        unit_of_measure: unit_of_measure,
+                        datapoints: myTimeSeries.slice()
+                    };
+                    Contours[paramOrder.indexOf(param_cd)] = {
+                        tsid: tsID,
+                        description: myDescription,
+                        unit_of_measure: unit_of_measure,
+                        datapoints: myTimeSeries.slice()
+                    };
 
-                // Process record
-                //
-                if (profilesDescriptionRe.test(description)) {
-
-                    let myDepth = '';
-                    if(DepthSeries[myDateTime]) {
-                        myDepth = DepthSeries[myDateTime];
+                    // Ensure the graphed period of time is equal between the profile and contour panels
+                    //  and graphed period of time is equal for timeseries panels
+                    //
+                    if(!firstDropDate) {
+                        firstDropDate = myTimeSeries[0].date;
                     }
-                    myTimeSeries.push({ 'date': myDateTime,
-                                        'concentration': myValue,
-                                        'depth': +myDepth });
+                    if(myTimeSeries[0].date < lastDropDate) {
+                        firstDropDate = myTimeSeries[0].date;
+                    }
+                    if(!lastDropDate) {
+                        lastDropDate = myTimeSeries[myTimeSeries.length - 1].date;
+                    }
+                    if(myTimeSeries[myTimeSeries.length - 1].date > lastDropDate) {
+                        lastDropDate = myTimeSeries[myTimeSeries.length - 1].date
+                    }
                 }
-                else {
-                    myTimeSeries.push({ 'date': myDateTime,
-                                        'concentration': myValue });
-                }
-            }
-            if (profilesDescriptionRe.test(description)) {
-                let myDescription = description.replace(profilesDescriptionRe, "")
-                Profiles[paramOrder.indexOf(param_cd)] = {
-                    tsid: tsID,
-                    description: myDescription,
-                    datapoints: myTimeSeries.slice()
-                };
-                Contours[paramOrder.indexOf(param_cd)] = {
-                    tsid: tsID,
-                    description: myDescription,
-                    datapoints: myTimeSeries.slice()
-                };
+                else if (seriesType === 'timeseries') {
+                    let myDescription = description.replace(timeseriesDescriptionRe, "")
+                    TimeSeries[paramOrder.indexOf(param_cd)] = {
+                        tsid: tsID,
+                        description: myDescription,
+                        unit_of_measure: unit_of_measure,
+                        datapoints: myTimeSeries.slice()
+                    };
 
-                // Ensure the graphed period of time is equal between the profile and contour panels
-                //  and graphed period of time is equal for timeseries panels
-                //
-                if(!firstDropDate) {
-                    firstDropDate = myTimeSeries[0].date;
-                }
-                if(myTimeSeries[0].date < lastDropDate) {
-                    firstDropDate = myTimeSeries[0].date;
-                }
-                if(!lastDropDate) {
-                    lastDropDate = myTimeSeries[myTimeSeries.length - 1].date;
-                }
-                if(myTimeSeries[myTimeSeries.length - 1].date > lastDropDate) {
-                    lastDropDate = myTimeSeries[myTimeSeries.length - 1].date
-                }
-            }
-            else {
-                let myDescription = description.replace(timeseriesDescriptionRe, "")
-                TimeSeries[paramOrder.indexOf(param_cd)] = {
-                    tsid: tsID,
-                    description: myDescription,
-                    datapoints: myTimeSeries.slice()
-                };
-
-                // Ensure the graphed period of time is equal between the profile and contour panels
-                //  and graphed period of time is equal for timeseries panels
-                //
-                if(!firstSeriesDate) {
-                    firstSeriesDate = myTimeSeries[0].date;
-                }
-                if(myTimeSeries[0].date < lastSeriesDate) {
-                    firstSeriesDate = myTimeSeries[0].date;
-                }
-                if(!lastSeriesDate) {
-                    lastSeriesDate = myTimeSeries[myTimeSeries.length - 1].date;
-                }
-                if(myTimeSeries[myTimeSeries.length - 1].date > lastSeriesDate) {
-                    lastSeriesDate = myTimeSeries[myTimeSeries.length - 1].date
+                    // Ensure the graphed period of time is equal between the profile and contour panels
+                    //  and graphed period of time is equal for timeseries panels
+                    //
+                    if(!firstSeriesDate) {
+                        firstSeriesDate = myTimeSeries[0].date;
+                    }
+                    if(myTimeSeries[0].date < lastSeriesDate) {
+                        firstSeriesDate = myTimeSeries[0].date;
+                    }
+                    if(!lastSeriesDate) {
+                        lastSeriesDate = myTimeSeries[myTimeSeries.length - 1].date;
+                    }
+                    if(myTimeSeries[myTimeSeries.length - 1].date > lastSeriesDate) {
+                        lastSeriesDate = myTimeSeries[myTimeSeries.length - 1].date
+                    }
                 }
             }
         }
 
-        //console.log('Profiles timeseries');
-        //console.log(Profiles);
+        //myLogger.info('Profiles timeseries');
+        //myLogger.info(Profiles);
 
-        //console.log('Contours timeseries');
-        //console.log(Contours);
+        //myLogger.info('Contours timeseries');
+        //myLogger.info(Contours);
 
-        //console.log('TimeSeries timeseries');
-        //console.log(TimeSeries);
+        //myLogger.info('TimeSeries timeseries');
+        //myLogger.info(TimeSeries);
 
         // When tab is clicked, create and render graphs for each site
         //
         $('button.tabNames').click(function() {
             let graphType = $(this).prop('id').replace('-tab', '');
-            //console.log(`Clicked ${graphType}`);
+            //myLogger.info(`Clicked ${graphType}`);
             if (graphType === 'profiles') {
                 plotTimeProfiles(Profiles, agency, siteNumber, siteName, firstDropDate, lastDropDate);
             } else if (graphType === 'timeseries') {
@@ -340,11 +304,11 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
                /** If first tab, show it, if not, hide it */
                 if (i == 0) {
                     tabContent.push(`<div id="${tag}" class="tab-pane fade in active show mt-2" role="tabpanel" aria-labelledby="${tabNames[i]}-tab" tabindex="0">`);
-                    tabContent.push(`<div class="tabName fs-5">${capitalize(tag)} Information</div>`);
+                    tabContent.push(`<div class="tabName fs-5 text-capitalize">${tag} Information</div>`);
                     tabContent.push(`<div class="tabContent fs-6 mt-2" id="${tag}Content"></div>`);
                 } else {
                     tabContent.push(`<div id="${tag}" class="tab-pane fade in mt-2">`);
-                    tabContent.push(`<div class="tabName fs-5">${capitalize(tag)} Information</div>`);
+                    tabContent.push(`<div class="tabName fs-5 text-capitalize">${tag} Information</div>`);
                     tabContent.push(`<div class="tabContent mt-2" id="${tag}Content"></div>`);
                 }
                 tabContent.push(`</div>`);
@@ -359,7 +323,14 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
         function loadInitialText(siteNumber) {
             const file = 'site_text/' + ['site_' + siteNumber, 'txt'].join('.'); /** File Path to load informational text from */
             $('#general').show();
-            $('#generalContent').load(file);
+            $('#generalContent').load(file, function( response, status, xhr ) {
+                if ( status == "error" ) {
+                    var msg = "Sorry but there was an error: ";
+                    myLogger.info(`${msg} ${xhr.status} ${xhr.statusText}`);
+                    $('#generalContent').html(`Missing general information for site ${siteNumber}`);
+                }
+            });
+            
             return;
         }
 
@@ -368,8 +339,8 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
          */
         function loadHelpText(helpFile, defaultDays, availableRecord, moreDataLink) {
 
-            //console.log('loadHelpText');
-            //console.log(helpFile, defaultDays, startingPorDate, endingPorDate);
+            //myLogger.info('loadHelpText');
+            //myLogger.info(helpFile, defaultDays, startingPorDate, endingPorDate);
 
             $('div#helpContent').append('<span id="helpIntro"></span>');
             $('div#helpContent').append('<span id="helpText"></span>');
@@ -410,63 +381,53 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
             //  Create popup content
             //
             var siteInfoContent  = [];
-            siteInfoContent.push('<div class="tabName fs-5">General Site Information</div>');
-            siteInfoContent.push('<p>');
-            siteInfoContent.push('<div class="divTable">');
-            siteInfoContent.push('<div class="divTableBody">');
+            siteInfoContent.push('<div class="bg-success bg-gradient text-white fs-4 fw-bold p-3 mb-2">General Site Information</div>');
+            siteInfoContent.push('<div class="divTable fs-6 mt-2 mb-4">');
 
             // Create entries
             //
-            var longitude    = mySiteInfo.dec_long_va;
             siteInfoContent.push(
-                ['<div class="divTableRow divTableBorder">',
-                 '<div class="divEmptyCell">',
-                 '<span class="label">',
-                 'Site Decimal Longitude:',
-                 '</span></div>',
-                 '<div class="divEmptyCell"></div>',
-                 '<div class="divEmptyCell"></div>',
-                 '<div class="divEmptyCell"></div>',
-                 '<div class="divEmptyCell">',
-                 `${longitude}`,
+                ['<div class="divTableRow">',
+                 '<div class="divTableCell">Site Decimal Longitude:</div>',
+                 '<div class="divTableCell"></div>',
+                 '<div class="divTableCell"></div>',
+                 '<div class="divTableCell"></div>',
+                 `<div class="divTableCell text-end">${mySiteInfo.dec_long_va}</div>`,
                  '</div>'
                 ].join('')
                 );
 
-            var latitude     = mySiteInfo.dec_lat_va;
             siteInfoContent.push(
-                ['<div class="divTableRow divTableBorder">',
-                 '<div class="divEmptyCell">',
-                 '<span class="label">',
-                 'Site Decimal Latitude:',
-                 '</span></div>',
-                 '<div class="divEmptyCell"></div>',
-                 '<div class="divEmptyCell"></div>',
-                 '<div class="divEmptyCell"></div>',
-                 '<div class="divEmptyCell">',
-                 `${latitude}`,
+                ['<div class="divTableRow">',
+                 '<div class="divTableCell">Site Decimal Latitude:</div>',
+                 '<div class="divTableCell"></div>',
+                 '<div class="divTableCell"></div>',
+                 '<div class="divTableCell"></div>',
+                 `<div class="divTableCell text-end">${mySiteInfo.dec_lat_va}</div>`,
+                 '</div>'
+                ].join('')
+                );
+
+            siteInfoContent.push(
+                ['<div class="divTableRow">',
+                 '<div class="divTableCell">Site Decimal Latitude-Longitude Datum:</div>',
+                 '<div class="divTableCell"></div>',
+                 '<div class="divTableCell"></div>',
+                 '<div class="divTableCell"></div>',
+                 `<div class="divTableCell text-end">${mySiteInfo.dec_coord_datum_cd}</div>`,
                  '</div>'
                 ].join('')
             );
-
-            var dec_coord_datum_cd = mySiteInfo.dec_coord_datum_cd;
-            siteInfoContent.push(
-                ['<div class="divTableRow divTableBorder">',
-                 '<div class="divEmptyCell">',
-                 '<span class="label">',
-                 'Decimal Latitude-longitude datum:',
-                 '</span></div>',
-                 '<div class="divEmptyCell"></div>',
-                 '<div class="divEmptyCell"></div>',
-                 '<div class="divEmptyCell"></div>',
-                 '<div class="divEmptyCell">',
-                 `${dec_coord_datum_cd}`,
-                 '</div>'
-                ].join('')
-            );
+            
+            siteInfoContent.push('</div>');
+            
+            // Parameter Information
+            //
+            siteInfoContent.push('<div class="bg-success bg-gradient text-white fs-4 fw-bold p-3 mt-2 mb-2">Parameter Information</div>');
+            siteInfoContent.push('<div class="divTable mt-2 mb-4">');
 
             siteInfoContent.push(
-                ['<div class="divTableRow table-primary">',
+                ['<div class="divTableRow bg-success-subtle fs-5 fw-bold">',
                  '<div class="divTableCell">',
                  'Parameter</br>Description',
                  '</div>',
@@ -480,7 +441,7 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
                  'End</br>Date',
                  '</div>',
                  '<div class="divTableCell">',
-                 'Counts',
+                 'Number</br>of Days',
                  '</div>',
                  '</div>'
                 ].join('')
@@ -489,22 +450,25 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
             // Sort by parameter code
             //
             const myTsIdList = Object.keys(myParameterData)
-                  .sort((a,b)=>myParameterData[a].parm_cd - myParameterData[b].parm_cd)
+                  .sort((a,b)=>myParameterData[a].parameter - myParameterData[b].parameter)
 
             for(myTsId of myTsIdList) {
-                var myParmCd   = myParameterData[myTsId].parm_cd;
-                var beginDate  = myParameterData[myTsId].begin_date;
-                var endDate    = myParameterData[myTsId].end_date;
-                var myParmName = myParameterData[myTsId].description
-                var myCount    = myParameterData[myTsId].count_nu
+                let parameter_description = myParameterData[myTsId].parameter_description
+                if(myParameterData[myTsId].sublocation_identifier) { parameter_description += `, ${myParameterData[myTsId].sublocation_identifier}` }
+                if(myParameterData[myTsId].web_description) { parameter_description += ` [${myParameterData[myTsId].web_description}]` }
+
+                let parameter   = myParameterData[myTsId].parameter;
+                let beginDate  = myParameterData[myTsId].begin_date;
+                let endDate    = myParameterData[myTsId].end_date;
+                let myDays     = myParameterData[myTsId].days;
                 
                 siteInfoContent.push(
                     ['<div class="divTableRow">',
                      '<div class="divTableCell">',
-                     `${myParmName}`,
+                     `${parameter_description}`,
                      '</div>',
                      '<div class="divTableCell">',
-                     `${myParmCd}`,
+                     `${parameter}`,
                      '</div>',
                      '<div class="divTableCell">',
                      `${beginDate}`,
@@ -513,31 +477,21 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
                      `${endDate}`,
                      '</div>',
                      '<div class="divTableCell">',
-                     `${myCount}`,
+                     `${myDays}`,
                      '</div>',
                      '</div>'
                     ].join('')
                 );
             }
 
-            //  Finish entries
+            //  Finish div table
             //
-            siteInfoContent.push('</div></div>');
-            siteInfoContent.push('</p>');
+            siteInfoContent.push('</div>');
             
-            $('#siteinformation').html(siteInfoContent);
-            return;
+            $('#siteinformation').html(siteInfoContent.join(''));
         }
         
         fadeModal(2000);
-    }
-
-
-    /** Utility to Capitalize first letter of a string
-     * @param {string} data - Incoming string to capitalize
-     */
-    function capitalize(data) {
-        return data.charAt(0).toUpperCase() + data.slice(1);
     }
 
     /** Exported call to begin render
@@ -549,8 +503,8 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
      */
     function plotTimeProfiles(Profiles, agency_cd, site_no, station_nm, firstDropDate, lastDropDate) {
 
-        console.log('Profiles timeseries');
-        //console.log(Profiles);
+        myLogger.info('Profiles timeseries');
+        myLogger.info(Profiles);
 
         message = "Profiles of depth and water-quality measurements for site " + station_nm;
         openModal(message);
@@ -569,30 +523,19 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
             //
             const tsID = Profiles[i].tsid;
             const myDescription = Profiles[i].description;
+            const unit_of_measure = Profiles[i].unit_of_measure;
             const svgID = ['svgProfiles', i].join("_"); // Creates and selects appropriate chart into svg variable
             const svg = d3.select("#" + svgID);
             const x_element = 'depth'; // Data to alter
             //const variableProfile = Profiles[i].datapoints // Capture only elements after the first drop date
             //const variableProfile = Profiles[i].datapoints.slice(0) // Capture only elements after the first drop date
-            var formatDate = d3.timeFormat("%b %d %Y"); // TODO: find where duplicate is and rename
             const lines = []; // TSID specific, date filtered array of different drops for that day
 
-            //console.log(myDescription)
-            //console.log(Profiles[i].datapoints)
-
-            // Set the ranges and save for later use
-            const xScale = d3.scaleLinear().range([0, x_axis]);
-            const yScale = d3.scaleLinear().range([y_axis, 0]);
-            const y2Scale = d3.scaleLinear().range([y_axis, 0]);
-            if (!profileScales[tsID]) { profileScales[tsID] = [] } // If first one, initialize a new array for it
-            profileScales[tsID].push({ 'xScale': xScale, 'yScale': yScale })
-
-            // Define axis'
-            const xAxis = d3.axisBottom().scale(xScale);
-            const yAxis = d3.axisLeft().scale(yScale);
-            const y2Axis = d3.axisRight().scale(y2Scale);
+            //myLogger.info(myDescription)
+            //myLogger.info(Profiles[i].datapoints)
 
             // Define Axis min and max values
+            //
             const maxXaxis = d3.max(Profiles[i].datapoints, d => d.concentration);
             const minXaxis = d3.min(Profiles[i].datapoints, d => d.concentration);
             const maxYaxis = d3.max(Profiles[i].datapoints, d => d.depth);
@@ -601,26 +544,37 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
             const minY2axis = d3.min(Profiles[i].datapoints, d => d.depth * 3.28084);
 
             // Define Date and Value min and max values
+            //
             //const maxDate = d3.max(Profiles[i].datapoints, d => d.date);
             const minDate = firstDropDate;
             const maxDate = lastDropDate;
             const maxValue = d3.max(Profiles[i].datapoints, d => d.concentration);
             const minValue = d3.min(Profiles[i].datapoints, d => d.concentration);
 
-            // Set the domain of the axes
-            xScale.domain([minXaxis, maxXaxis]);
-            yScale.domain([maxYaxis, minYaxis]);
-            y2Scale.domain([maxY2axis, minY2axis]);
+            // Set axis scales
+            //
+            const xScale = d3.scaleLinear().domain([minXaxis, maxXaxis]).range([0, x_axis]);
+            const yScale = d3.scaleLinear().domain([maxYaxis, minYaxis]).nice().range([y_axis, 0]);
+            const y2Scale = d3.scaleLinear().domain([maxY2axis, minY2axis]).nice().range([y_axis, 0]);
+            if (!profileScales[tsID]) { profileScales[tsID] = [] } // If first one, initialize a new array for it
+            profileScales[tsID].push({ 'xScale': xScale, 'yScale': yScale })
+
+            // Define axes
+            //
+            const xAxis = d3.axisBottom().scale(xScale);
+            const yAxis = d3.axisLeft().scale(yScale);
+            const y2Axis = d3.axisRight().scale(y2Scale);
 
             // Prepare a color palette for points
             // TODO is this needed/used?
             const color = d3.scaleSequential(d3.interpolateCool)
             color.domain([maxValue, minValue])
 
-            // Generate Chart Shell
+            // Generate profile plot
+            //
             setIntroTextDate(dayjs(maxDate).endOf('day')); // Set to text to reflect end of the day of the latest measurement
             generateChartShell(tsID, myDescription, svgID, svg);
-            generateAxis(svg, xAxis, yAxis, y2Axis);
+            generateAxis(svg, svgID, xAxis, 'Concentration', yAxis, 'Depth, in meters', y2Axis, 'Depth, in feet');
             addSiteText(svg);
             addNoDataBackground(svg);
 
@@ -630,7 +584,7 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
             //filterDataByDate(toSet, variableProfile, lines);
 
             // Add lines and circles for day to graph
-            graphDay(lines, tsID, svg, xScale, yScale, x_element, maxDate);
+            graphDay(lines, tsID, svg, xScale, yScale, x_element, maxDate, unit_of_measure);
 
             // Generate Slider
             generateSlider(svg, minDate, maxDate, Profiles[i].datapoints, tsID, svgID, x_element, xScale, yScale, profileScales)
@@ -694,7 +648,7 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
                         sliderLockStatus = false;
                         $('span#dateLabel').css('color', 'grey');
                     }
-                    console.log(`Clicked slider lock ${sliderLockStatus}`);
+                    myLogger.info(`Clicked slider lock ${sliderLockStatus}`);
                 });
 
             });
@@ -703,94 +657,127 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
         }
 
         function generateChartShell(tsID, myDescription, svgID, svg) {
-            // Local Variables
-            let myTitle = `${myDescription} [${tsID}]`;
-            const graphTitleSize = textSize(myTitle);
-            const containerWidth = +d3.select("#" + svgID).style('width').slice(0, -2); // width of title
-            let titles = myTitle.split(/,/);
-            let fontHeight = graphTitleSize.height;
-            let fontWidth = graphTitleSize.width / myTitle.length;
+
+            // Check width of title
+            //
+            const myTitle = `${myDescription} [${tsID}]`;
+            let myText = textSize(myTitle);
+            let fontHeight = myText.height;
+            let fontWidth = myText.width / myTitle.length;
+
+            let containerWidth = +d3.select("#" + svgID).style('width').slice(0, -2);
             let hold = '';
-            let x_text = x_box_min * 0.1;
-            let y_text = fontHeight * 0.75;
 
-
-            // Put title on graph - if too large for container, put remaining portion of title on the next line
-            if (graphTitleSize.width < containerWidth) {
-                svg.append("text")
+            // Add site information
+            //
+            if (myText.width < containerWidth) {
+               svg.append("text")
                     .attr('x', x_box_min * 0.1)
-                    .attr('y', y_text)
+                    .attr('y', fontHeight * 0.85)
                     .attr('class', 'site_title')
                     .text(myTitle);
-                return
             } else {
-                titles.forEach(titleSection => {
-                    // If too big for container, render what fits and then start a new line
-                    if (([hold, titleSection].join(',').length * fontWidth) > containerWidth) {
-                        svg.append("text")
+                let myTexts = myTitle.split(/,/);
+                let title = "";
+                let x_text = x_box_min * 0.1;
+                let y_text = fontHeight * 0.85;
+                for (let ii = 0; ii < myTexts.length; ii++) {
+                    if (([title, myTexts[ii]].join(',').length * fontWidth) > containerWidth) {
+                        let mySiteText = svg.append("text")
                             .attr('x', x_text)
                             .attr('y', y_text)
                             .attr('class', 'site_title')
-                            .text(hold);
-                        hold = titleSection;
+                            .text(title);
+                        title = myTexts[ii];
                         x_text = x_box_min * 0.1 + fontWidth * 2.0;
-                        y_text += fontHeight * 0.75
+                        y_text += fontHeight * 0.85;
                     } else {
-                        if (hold.length > 0) {
-                            hold = [hold, titleSection].join(","); // Add title section to the rest of title
-                        } else {
-                            hold = titleSection; // First word in title
-                        }
+                        if (title.length > 0) { title = [title, myTexts[ii]].join(","); } else { title = myTexts[ii]; }
                     }
-                });
+                }
+
+                svg.append("text")
+                    .attr('x', x_text)
+                    .attr('y', y_text)
+                    .attr('class', 'site_title')
+                    .text(title);
             }
 
-            // Add new title to chart and insert profiles element into DOM
-            svg.attr("class", "svg border-2 border-black shadow mb-3 svgProfiles");
-
-            svg.append("text")
-                .attr('x', x_text)
-                .attr('y', y_text)
-                .attr('class', 'site_title')
-                .text(hold);
             return;
         }
 
-        function generateAxis(svg, xAxis, yAxis, y2Axis) {
+        function generateAxis(svg, svgID, xAxis, xAxisLabel, yAxis, yAxisLabel, y2Axis, y2AxisLabel) {
+
             // Add the X Axis
+            //
             svg.append("g")
+                .attr("id", `x-axis-${svgID}`)
                 .attr("class", "x axis")
-                .attr("transform", "translate(" + [x_box_min, y_box_max].join(",") + ")")
+                .attr("transform", `translate(${x_box_min}, ${y_box_max})`)
                 .call(xAxis);
 
+            // Determine axis tic dimensions
+            //
+            axisInfo  = getSvg(`#x-axis-${svgID}`)
+            xPosition = axisInfo.x
+            yPosition = axisInfo.y
+            ticWidth  = axisInfo.width
+            ticHeight = axisInfo.height
+
+            // Axis label
+            //
+            svg.append("text")
+                .attr("transform", `translate(${x_box_min + ticWidth * 0.5}, ${y_box_max + ticHeight * 2 })`)
+                .attr("font-weight", "bold")
+                .attr("text-anchor", "middle")
+                .text(xAxisLabel);
+
             // Add the Y Axis
+            //
             svg.append("g")
+                .attr("id", `y-axis-${svgID}`)
                 .attr("class", "y axis")
-                .attr("transform", "translate(" + [x_box_min, y_box_min].join(",") + ")")
+                .attr("transform", `translate(${x_box_min}, ${y_box_min})`)
                 .call(yAxis)
 
-            // Add secondary Y Axis
-            svg.append("g")
-                .attr("class", "y axis")
-                .attr("transform", "translate(" + [x_box_max, y_box_min].join(",") + ")")
-                .call(y2Axis)
+            // Determine axis tic dimensions
+            //
+            axisInfo  = getSvg(`#y-axis-${svgID}`)
+            xPosition = axisInfo.x
+            yPosition = axisInfo.y
+            ticWidth  = axisInfo.width
+            ticHeight = axisInfo.height
 
             // Add the Y Axis label
-            var xLabel = x_box_min * 0.5;
-            var yLabel = y_box_min + y_axis * 0.5;
+            //
             svg.append("text")
-                .attr("transform", "translate(" + [xLabel, yLabel].join(", ") + ") rotate(-90)")
+                .attr("transform", `translate(${x_box_min - ticWidth * 2}, ${y_box_min + y_axis * 0.5}) rotate(-90)`)
                 .attr("font-weight", "bold")
-                .style("text-anchor", "middle")
+                .attr("text-anchor", "middle")
                 .text("Depth, in meters");
 
+            // Add secondary Y Axis
+            //
+            svg.append("g")
+                .attr("id", `y2-axis-${svgID}`)
+                .attr("class", "y axis")
+                .attr("transform", `translate(${x_box_max}, ${y_box_min})`)
+                .call(y2Axis)
+
+            // Determine axis tic dimensions
+            //
+            axisInfo  = getSvg(`#y2-axis-${svgID}`)
+            xPosition = axisInfo.x
+            yPosition = axisInfo.y
+            ticWidth  = axisInfo.width
+            ticHeight = axisInfo.height
+
             // Add the Secondary Y Axis label
-            var xLabel = x_box_max + x_box_min * 0.5;
-            var yLabel = y_box_min + y_axis * 0.5;
+            //
             svg.append("text")
-                .attr("transform", "translate(" + [xLabel, yLabel].join(", ") + ") rotate(90)")
+                .attr("transform", `translate(${x_box_max + ticWidth * 2.5}, ${y_box_min + y_axis * 0.5}) rotate(-90)`)
                 .attr("font-weight", "bold")
-                .style("text-anchor", "middle")
+                .attr("text-anchor", "middle")
                 .text("Depth, in feet");
 
             return;
@@ -798,13 +785,11 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
 
         function addNoDataBackground(svg) {
             // Add no data text keep hidden until needed
-            const xLabel = x_box_min + x_axis * 0.5;
-            const yLabel = y_box_min + y_axis * 0.5;
-            var graphID = svg.attr("id");
+            let graphID = svg.attr("id");
             svg.append("text")
                 .attr("id", graphID)
                 .attr("class", "noData " + graphID)
-                .attr("transform", "translate(" + [xLabel, yLabel].join(", ") + ")")
+                .attr("transform", `translate(${x_box_min + x_axis * 0.5}, ${y_box_min + y_axis * 0.5})`)
                 .attr("font-weight", "bold")
                 .style("text-anchor", "middle")
                 .style("opacity", "0.0")
@@ -813,23 +798,22 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
         }
 
         function addSiteText(svg) {
-            const xLabel = x_box_min + x_axis * 0.5;
-            const yLabel = y_box_min + y_axis * 0.15;
-            const yLabel2 = y_box_min + y_axis * 0.25;
 
             // For agency and site number
             svg.append("text")
                 .attr("class", "siteText")
-                .attr("transform", "translate(" + [xLabel, yLabel].join(", ") + ")")
+                .attr("transform", `translate(${x_box_min + x_axis * 0.5}, ${y_box_min})`)
+                .attr("dy", `${y_axis * 0.15}`)
                 .attr("font-weight", "bold")
                 .style("text-anchor", "middle")
                 .style("opacity", "0.2")
-                .text([agency_cd, site_no].join(" "));
+                .text(`${agency_cd} ${site_no}`)
 
             // For Station name
             svg.append("text")
                 .attr("class", "siteText")
-                .attr("transform", "translate(" + [xLabel, yLabel2].join(", ") + ")")
+                .attr("transform", `translate(${x_box_min + x_axis * 0.5}, ${y_box_min})`)
+                .attr("dy", `${y_axis * 0.25}`)
                 .attr("font-weight", "bold")
                 .style("text-anchor", "middle")
                 .style("opacity", "0.2")
@@ -857,7 +841,7 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
             const endDate = dayjs(input).endOf('day'); // set to 23:59 pm
             const filteredByDate = variableProfile.filter(function(d) { return d.date > startDate && d.date < endDate && d.concentration !== null && d.depth !== null; })
 
-            //console.log(filteredByDate)
+            //myLogger.info(filteredByDate)
 
             // Make a line for each drop
             var linesTracker = 0;
@@ -882,20 +866,21 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
             return;
         }
 
-        function graphDay(lines, tsid, svg, xScale, yScale, x_element, maxDate) {
+        function graphDay(lines, tsid, svg, xScale, yScale, x_element, maxDate, unit_of_measure) {
 
             // If no data for that day
             if (lines.length < 1) {
+                myLogger.info(`No data ${maxDate} Date ${d3.timeFormat("%b %d, %Y")(maxDate)}`);
                 var graphID = svg.attr("id");
                 d3.selectAll("." + graphID)
                   .style("opacity", "1.0")
-                  .text('No data recorded for ' + formatDate(maxDate))
+                  .text(`No data recorded for ${maxDate}`)
                 return;
             }
             // Loop through each drop and graph the line for it
             for (var c = 0; c < lines.length; ++c) {
                 graphLines(lines[c], tsid, svg, c, xScale, yScale, x_element);
-                graphDatapoints(lines[c], tsid, svg, c, xScale, yScale);
+                graphDatapoints(lines[c], tsid, svg, c, xScale, yScale, unit_of_measure);
             }
 
             return;
@@ -917,32 +902,38 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
             // Add lines to graph
             svg.append("path")
                 .data([data])
-                .attr("id", ["line", tsid, count].join("_"))
+                .attr("id", `line_${tsid}_${count}`)
                 .attr("class", `line profileCharts lines_${tsid}`)
-                .attr("transform", "translate(" + [x_box_min, y_box_min].join(",") + ")")
+                .attr("transform", `translate(${x_box_min}, ${y_box_min})`)
+                .style("stroke-width", '3px')
+                .style("stroke", 'black')
                 .attr("d", line)
                 // Styling
                 .on('mouseover', function(d) {
                     const circleOver = this.attributes.id.textContent.replace('line', 'circle')
                     d3.select(this) //on mouseover of each line, give it a nice thick stroke
-                        .style("stroke-width", '3px')
-                        .style("stroke", '#B47846');
+                        .raise()
+                        .style("stroke-width", '5px')
+                        .style("stroke", 'orange')
                     d3.selectAll(`#${circleOver}`)
-                        .style("fill", '#B47846')
-                        .style("stroke", 'black');
-                })
+                        .raise()
+                        .style("fill", 'orange')
+                        .style("stroke", 'orange')
+                        .style("stroke-width", '5px')
+               })
                 .on('mouseout', function(d) {
                     const circleOut = this.attributes.id.textContent.replace('line', 'circle')
-                    d3.select(this) //on mouseover of each line, give it a nice thick stroke
-                        .style("stroke-width", '2px')
-                        .style("stroke", 'black');
+                    d3.select(this) //on mouseout of each line, return thinner stroke
+                        .style("stroke-width", '3px')
+                        .style("stroke", 'black')
                     d3.selectAll(`#${circleOut}`)
-                        .style("fill", 'steelblue')
-                        .style("stroke-width", '1.5px');
+                        .style("fill", 'red')
+                        .style("stroke", 'red')
+                        .style("stroke-width", '1.5px')
                 })
         }
 
-        function graphDatapoints(data, tsid, svg, count, xScale, yScale) {
+        function graphDatapoints(data, tsid, svg, count, xScale, yScale, unit_of_measure) {
 
             // Add the datapoint circles
             svg.append(`g`)
@@ -951,28 +942,31 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
                 .data(data)
                 .enter()
                 .append("circle")
-                .attr("id", ["circle", tsid, count].join("_"))
+                .attr("id", `circle_${tsid}_${count}`)
                 .attr("class", `circle profileCharts circles_${tsid}`)
-                .attr("transform", "translate(" + [x_box_min, y_box_min].join(",") + ")")
+                .attr("transform", `translate(${x_box_min}, ${y_box_min})`)
                 .attr("cx", d => xScale(d.concentration))
                 .attr("cy", d => yScale(d.depth))
-                .attr("r", 3)
-                .attr("stroke", 'black')
-                .style("fill", 'steelblue')
+                .attr("r", 4)
+                .attr("stroke", 'red')
+                .style("fill", 'red')
                 .style("stroke-width", '1.5px')
-                .on('mouseover',  d => {
-                    tooltip
-                        .text('Value: ' + d.concentration + '\nDepth: ' + d.depth)
-                        .style("left", d3.event.pageX + "px")
-                        .style("top", d3.event.pageY - 28 + "px")
-                        //.transition()
-                        //.duration(200)
+                .on('mouseover', function(event, d) {
+                    tooltip.transition()
+                        .duration(200)
                         .style("opacity", 1)
+                        .style("stroke", 'orange')
+                        .style("fill", 'orange')
+                    tooltip
+                        .html(`Date: ${formatDate(d.date)}<br>Depth: ${d.depth} m<br>${d.qualifier} value: ${d.concentration} ${unit_of_measure}`)
+                        .style("left", event.pageX + "px")
+                        .style("top", event.pageY - 28 + "px")
                 })
                 .on("mouseout", () => {
-                    tooltip
-                        //.transition()
-                        //.duration(200)
+                    tooltip.transition()
+                        .duration(200)
+                        .style("stroke", 'red')
+                        .style("fill", 'red')
                         .style("opacity", 0);
                 });
             return;
@@ -983,72 +977,58 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
             /*             https://bl.ocks.org/officeofjane/b3f6a4f89a54fb193265b5c05659e17b
             */
             var targetValue = x_axis;
-            var formatDateIntoYear = d3.timeFormat("%b %d");
 
-            // targetValue is the length of the slider track
-            const xSlider = d3.scaleTime()
-                .domain([minDate, maxDate])
-                .range([0, targetValue])
-                .clamp(true);
-
+            const x_slider = x_box_max - x_box_min;
             const y_slider = y_box_max + slider_box;
 
-            // Translate places slider track on page
-            const slider = svg.append("g")
-                .attr("id", svgID)
+            // Set axis scales
+            //
+            const sliderScale = d3.scaleTime()
+                  .domain([new Date(minDate), new Date(maxDate)]).nice()
+                  .range([0, x_slider])
+
+            var slider = d3
+                .sliderBottom(sliderScale)
+                //.min(minDate)
+                //.max(maxDate)
+                .step(1000 * 60 * 60 * 24)
+                .width(x_slider)
+                .tickFormat(d3.timeFormat('%b %d'))
+                //.ticks(7)
+                .default(maxDate)
+                .handle(
+                    d3.symbol()
+                        .type(d3.symbolCircle)
+                        .size(200)()
+                )
+                .on('onchange', val => {
+                    let currentDate = d3.timeFormat('%b %d %Y')(val);
+                    let sliderValue = sliderScale(val);
+                    myLogger.info(`slider ${val} Date ${currentDate} X ${sliderValue}`);
+                    sliderOnDrag(val, sliderValue, Profiles, tsID, svg, x_element, xScale, yScale, profileScales)
+                })
+
+            var gTime = svg.append('g')
+                .attr("id", `slider-${svgID}`)
                 .attr("class", "slider")
-                .attr("transform", "translate(" + [x_box_min, y_slider].join(",") + ")")
+                .attr('width', 500)
+                .attr('height', 100)
+                .append('g')
+                .attr('transform', `translate(${x_box_min}, ${y_slider})`)
 
-            // Actual slider labels: .data(xslider()) controls on-track labels
-            slider.insert("g", ".track-overlay")
-                .attr("class", "sliderticks")
-                .attr("transform", "translate(0," + 18 + ")")
-                .selectAll("text")
-                .data(xSlider.ticks(9))
-                .enter()
-                .append("text")
-                .attr("x", xSlider)
-                .attr("y", 10)
-                .attr("text-anchor", "middle")
-                .text(function(d) { return formatDateIntoYear(d); });
+            gTime.call(slider);
 
-            slider.append("line")
-                .attr("class", "track")
-                .attr("x1", xSlider.range()[0])
-                .attr("x2", xSlider.range()[1])
-                .select(function() { return this.parentNode.appendChild(this.cloneNode(true)); })
-                .attr("class", "track-inset")
-                .select(function() { return this.parentNode.appendChild(this.cloneNode(true)); })
-                .attr("class", "track-overlay")
-                .call(d3.drag()
-                    .on("start.interrupt", function() { slider.interrupt(); })
-                    .on("start drag", function() { sliderOnDrag(d3.event.x, xSlider, Profiles, tsID, svg, x_element, xScale, yScale, profileScales) })
-                );
-
-            // Actual slider circle: r is size of circle, handle is the class identifier
-            slider.insert("circle", ".track-overlay")
-                .attr("class", `handle handle_${tsID}`)
-                .attr("r", 9)
-                .attr("cx", xSlider(maxDate));
-
-
-            // Label positioning and definition for slider
-            slider.append("text")
-                .attr("class", `sliderlabels sliderlabel_${tsID}`)
-                .attr("text-anchor", "end")
-                .text(formatDate(maxDate))
-                .attr("transform", "translate(0," + (-15) + ")")
-                .attr("x", xSlider(maxDate))
+            //setIntroTextDate(sliderValue`);
         }
 
-        function sliderOnDrag(currentValue, xSlider, Profiles, tsID, svg, x_element, xScale, yScale, profileScales) {
+        function sliderOnDrag(currentValue, sliderValue, Profiles, tsID, svg, x_element, xScale, yScale, profileScales) {
 
-            //console.log(`sliderLockStatus ${sliderLockStatus}`);
-            //console.log(variableProfile);
-            //console.log('profileScales');
-            //console.log(profileScales);
+            //myLogger.info(`sliderLockStatus ${sliderLockStatus}`);
+            //myLogger.info(variableProfile);
+            //myLogger.info('profileScales');
+            //myLogger.info(profileScales);
 
-            const currentDate = xSlider.invert(currentValue); // User moves slider to specified date
+            let currentDate = d3.timeFormat('%b %d, %Y')(currentValue);
             const sliderLines = []
 
             // Check if graphing is locked to individual or all
@@ -1056,26 +1036,25 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
             if (sliderLockStatus) {
                 const lockedSliderLines = []
 
-                setIntroTextDate(currentDate);
-
-                // Set slider to current date
-                d3.selectAll(`.handle`)
-                    .attr("cx", xSlider(currentDate));
-
-                d3.selectAll(`.sliderlabels`)
-                    .attr("x", xSlider(currentDate))
-                    .text(formatDate(currentDate));
+                setIntroTextDate(currentValue);
 
                 d3.selectAll(".noData")
                     .style("opacity", "0.0")
                     .text('No data recorded for ');
 
+                // Set slider to current date
+                d3.selectAll('.parameter-value')
+                    .attr("transform", `translate(${sliderValue},0)`);
+                d3.selectAll('.parameter-value text').each(function(d, i) {
+                    d3.select(this).text(d3.timeFormat('%b %d')(currentValue));
+                });
+
                 for (var i = 0; i < Profiles.length; i++) {
                     // Set specifics for each graph
                     let tsid = Profiles[i].tsid
-                    //console.log(`tsid ${tsid}`);
+                    //myLogger.info(`tsid ${tsid}`);
                     
-                    const lockedSvg = d3.select("#" + ['svgProfiles', i].join("_"));
+                    const lockedSvg = d3.select(`#svgProfiles_${i}`);
                     const lockedxScale = profileScales[tsid][0].xScale;
                     const lockedyScale = profileScales[tsid][0].yScale;
                     lockedSliderLines[i] = [];
@@ -1095,14 +1074,6 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
                     let tsid = Profiles[i].tsid
 
                     if (tsid === tsID) {
-
-                        // Individual Graphs
-                        d3.selectAll(`.handle_${tsID}`)
-                            .attr("cx", xSlider(currentDate));
-
-                        d3.selectAll(`.sliderlabel_${tsID}`)
-                            .attr("x", xSlider(currentDate))
-                            .text(formatDate(currentDate));
 
                         filterDataByDate(currentDate, Profiles[i].datapoints, sliderLines)
 
@@ -1133,8 +1104,6 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
         message = "Time-series of water-quality measurements for site " + station_nm;
         openModal(message);
         
-        const formatDate = d3.timeFormat("%b %d");
-        
         // Add text content above panels
         //
         var svgContent = [];
@@ -1144,15 +1113,15 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
 
         // Add panels
         //
-        for (var i = 0; i < TimeSeries.length; i++) {
-            var tsID = TimeSeries[i].tsid;
-            var myTitle = TimeSeries[i].description;
-            //console.log(`TimeSeries -> ${tsID} ${myTitle}`);
+        for (let i = 0; i < TimeSeries.length; i++) {
+            let tsID = TimeSeries[i].tsid;
+            let myTitle = TimeSeries[i].description;
+            //myLogger.info(`TimeSeries -> ${tsID} ${myTitle}`);
 
-            var svgID = ['svgTimeSeries', i].join("_");
+            let svgID = ['svgTimeSeries', i].join("_");
 
             svgContent.push('<li>');
-            svgContent.push('<svg id="' + svgID + '" class="svg border-2 border-black shadow mb-3"></svg>');
+            svgContent.push(`<svg id="${svgID}" class="panel_${tsID} svg border-2 border-black shadow mb-3"></svg>`);
             svgContent.push('</li>');
         }
         svgContent.push('</ul>');
@@ -1184,122 +1153,335 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
 
         // SVG panels
         //
-        for (var i = 0; i < TimeSeries.length; i++) {
-            var tsID = TimeSeries[i].tsid;
-            var svgID = ['svgTimeSeries', i].join("_");
-            var myTitle = `${TimeSeries[i].description} [${tsID}]`;
-            var myText = textSize(myTitle);
-            var fontHeight = myText.height;
+        for (let i = 0; i < TimeSeries.length; i++) {
+
+            // Local Variables
+            //
+            const tsID = TimeSeries[i].tsid;
+            const svgID = `svgTimeSeries_${i}`
+            const unit_of_measure = TimeSeries[i].unit_of_measure;
 
             // SVG canvas
             //
-            var svg = d3.select("#" + svgID);
-
+            const svg = d3.select(`#${svgID}`);
+            
             // Check width of title
             //
-            var containerWidth = +d3.select("#" + svgID).style('width').slice(0, -2);
+            const myTitle = TimeSeries[i].description;
+            let myText = textSize(myTitle);
+            let fontHeight = myText.height;
+            let fontWidth = myText.width / myTitle.length;
+
+            let containerWidth = +d3.select("#" + svgID).style('width').slice(0, -2);
 
             // Add site information
             //
             if (myText.width < containerWidth) {
-                var myText = svg.append("text")
-                    .attr('x', x_box_min * 0.1)
-                    .attr('y', fontHeight * 0.75)
+                svg.append("text")
                     .attr('class', 'site_title')
+                    .attr('x', x_box_min * 0.1)
+                    .attr('y', fontHeight * 0.85)
                     .text(myTitle);
             } else {
-                var fontHeight = myText.height;
-                var fontWidth = myText.width / myTitle.length;
-                var myTexts = myTitle.split(/,/);
-                var title = "";
-                var x_text = x_box_min * 0.1;
-                var y_text = fontHeight * 0.75;
-                for (var ii = 0; ii < myTexts.length; ii++) {
+                let myTexts = myTitle.split(/,/);
+                let title = "";
+                let x_text = x_box_min * 0.1;
+                let y_text = fontHeight * 0.85;
+                for (let ii = 0; ii < myTexts.length; ii++) {
                     if (([title, myTexts[ii]].join(',').length * fontWidth) > containerWidth) {
-                        var myText = svg.append("text")
+                        svg.append("text")
+                            .attr('class', 'site_title')
                             .attr('x', x_text)
                             .attr('y', y_text)
-                            .attr('class', 'site_title')
                             .text(title);
                         title = myTexts[ii];
                         x_text = x_box_min * 0.1 + fontWidth * 2.0;
-                        y_text += fontHeight * 0.75;
+                        y_text += fontHeight * 0.85;
                     } else {
                         if (title.length > 0) { title = [title, myTexts[ii]].join(","); } else { title = myTexts[ii]; }
                     }
                 }
 
-                var myText = svg.append("text")
+                svg.append("text")
+                    .attr('class', 'site_title')
                     .attr('x', x_text)
                     .attr('y', y_text)
-                    .attr('class', 'site_title')
                     .text(title);
             }
 
-            // Insert null to break line if missing value occurs
+            // Insert null to break line if
+            //   exceed high/low threshold values
+            //   missing value occurs
+            //
+            // Set color for Approved/Provisional record
             //
             let tempL     = [];
             let deltaDate = null;
-            //console.log(`TimeSeries ${myTitle} ${TimeSeries[i].datapoints.length}`);
+            let ThresholdAbove = null;
+            let ThresholdBelow = null;
+            if(TimeSeries[i].ThresholdAbove) ThresholdAbove = TimeSeries[i].ThresholdAbove
+            if(TimeSeries[i].ThresholdBelow) ThresholdBelow = TimeSeries[i].ThresholdBelow
+            //myLogger.info(`TimeSeries ${myTitle} ${TimeSeries[i].datapoints.length}`);
             for (let ii = 1; ii < TimeSeries[i].datapoints.length; ii++) {
+
+                if(ThresholdAbove && TimeSeries[i].datapoint[ii] > ThresholdAbove) TimeSeries[i].datapoint[ii] = null
+                if(ThresholdBelow && TimeSeries[i].datapoint[ii] < ThresholdBelow) TimeSeries[i].datapoint[ii] = null
+
+                let qualifierColor = 'orange';
+                if(TimeSeries[i].datapoints[ii].qualifier == 'Approved') {
+                    qualifierColor = 'blue';
+                }
+                TimeSeries[i].datapoints[ii].color = qualifierColor
+                
                 currentDate = TimeSeries[i].datapoints[ii].date;
                 if(!deltaDate) {
                     lastDate  = TimeSeries[i].datapoints[ii - 1].date;
                     tempCurrent = dayjs(currentDate).format('MMM DD, YYYY HH:mm');
                     tempLast    = dayjs(lastDate).format('MMM DD, YYYY HH:mm');
                     deltaDate = currentDate - lastDate;
-                    //console.log(`deltaDate ${deltaDate} for current date ${tempCurrent} to last date ${tempLast}`);
+                    //myLogger.info(`deltaDate ${deltaDate} for current date ${tempCurrent} to last date ${tempLast}`);
                 }
                 else {
                     deltaTemp = currentDate - lastDate;
                     if(deltaTemp > deltaDate) {
                         tempCurrent = dayjs(currentDate).format('MMM DD, YYYY HH:mm');
                         tempLast    = dayjs(lastDate).format('MMM DD, YYYY HH:mm');
-                        //console.log(`deltaTemp > deltaDate ${deltaTemp} for current date ${tempCurrent} to last date ${tempLast}`);
+                        //myLogger.info(`deltaTemp > deltaDate ${deltaTemp} for current date ${tempCurrent} to last date ${tempLast}`);
                         myDateTime = lastDate + deltaTemp;
                         myValue    = null;
-                        tempL.push({'date': myDateTime, 'concentration': myValue });
+                        myQualifier = TimeSeries[i].datapoints[ii].qualifier;
+                        tempL.push({'date': myDateTime, 'concentration': myValue, 'qualifier': myQualifier, 'color': null });
                     }
                 }
                 lastDate = currentDate;
                 tempL.push(TimeSeries[i].datapoints[ii]);
             }
             TimeSeries[i].datapoints = tempL.slice();
+            myLogger.info(`TimeSeries`);
+            myLogger.info(TimeSeries[i].datapoints);
 
-            // Set the ranges
+            // Graph
             //
-            var xScale = d3.scaleTime().range([0, x_axis]);
-            var yScale = d3.scaleLinear().range([y_axis, 0]);
+            let timeseriesGraph = svg.append("g")
+                .attr("class", `timeseriesGraph-${svgID}`)
+                
+            // X axis scale
+            //
+            let maxDate = lastSeriesDate;
+            let minDate = firstSeriesDate;
+            
+            let xScale = d3.scaleTime()
+                .domain([minDate, maxDate]).nice()
+                .range([0, x_axis])
 
-            // Define axes
+            // X axis
             //
-            //var xAxis = d3.axisBottom().tickFormat(formatDate).scale(xScale);
-            var xAxis = d3.axisBottom()
-                .tickFormat(function(date) {
-                    if (d3.timeYear(date) < date) {
-                        return d3.timeFormat('%b %d')(date);
-                    } else {
-                        return d3.timeFormat('%Y')(date);
-                    }
+            let axisLine = timeseriesGraph.append("g")
+                .attr("class", "timeseries-x-axis")
+                .attr("transform", `translate(${x_box_min}, ${y_box_max})`)
+                .call(d3.axisBottom(xScale).tickValues([]).tickSize(0))
+
+            let axisBottom = timeseriesGraph.append("g")
+                .attr("id", "timeseries-x-axis")
+                .attr("class", "timeseries-x-axis")
+                .attr("transform", `translate(${x_box_min}, ${y_box_max + 10})`)
+                .call(d3.axisBottom(xScale)
+                      .tickFormat(d3.timeFormat('%b %d')))
+
+            let tickCount = xScale.ticks().length
+            axisBottom
+                .selectAll('g.timeseries-x-axis g.tick')
+                .append('text')
+                .attr("dy", "3em")
+                .attr("fill", "currentColor")
+                .text((e, i) => {
+                    if(i === 0 ) { return d3.timeFormat('%Y')(minDate) }
+                    if(i === tickCount - 1) { return d3.timeFormat('%Y')(maxDate) }
+                });
+
+            timeseriesGraph.append("g")
+                .append("text")
+                .attr("id", `timeseriesGraph-Xaxislabel-${svgID}`)
+                .attr("class", "x-axislabel")
+                .attr("transform", `translate(${x_box_min + x_axis * 0.5}, ${y_box_max})`)
+                .attr("dy", "3em")
+                .attr("text-anchor", "middle")
+                .attr("font-family", "sans-serif")
+                .attr("font-weight", "700")
+                .text("Calendar"); 
+
+            // Y Axis
+            //
+            let maxValue = d3.max(TimeSeries[i].datapoints, d => d.concentration);
+            let minValue = d3.min(TimeSeries[i].datapoints, d => d.concentration);
+            let yScale = d3.scaleLinear()
+                .domain([minValue, maxValue]).nice()
+                .range([y_axis, 0]);
+
+            // Retrieve tick values from the scale
+            //
+            const ticks = yScale.ticks();
+
+            // The actual tick step can be determined from the generated ticks.
+            //
+            const tickInterval = ticks[1] - ticks[0];
+            let yMin = yScale.domain()[0];
+            let yMax = yScale.domain()[1];
+            myLogger.info(`Values maximum value ${maxValue} minimum value ${minValue} Y axis maximum ${yMax} minimum ${yMin} tickInterval ${tickInterval}`);
+            if(Math.abs((yMax - maxValue)) < tickInterval) yMax += tickInterval
+            if(Math.abs((yMin - minValue)) < tickInterval) yMin -= tickInterval
+            if(yMin < 0.0) yMin = 0.0
+            yScale.domain([yMin, yMax])
+            
+            // Add the Y Axis
+            //
+            timeseriesGraph.append("g")
+                .attr("class", "y axis")
+                .attr("transform", `translate(${x_box_min}, ${y_box_min})`)
+                .call(d3.axisLeft(yScale))
+
+            // Add the Y Axis label
+            //
+            timeseriesGraph.append("g")
+                .append("text")
+                .attr("class", "y-axislabel")
+                .attr("transform", `translate(${x_box_min * 0.5}, ${y_box_min + y_axis * 0.5}) rotate(-90)`)
+                .attr("dx", "-0.71em")
+                .attr("text-anchor", "middle")
+                .attr("font-family", "sans-serif")
+                .attr("font-weight", "700")
+                .text("Concentration");
+
+            // Mark qualifier for Approved/Provisional records
+            //
+            const qualifierGroups = d3.groups(TimeSeries[i].datapoints, d => d.qualifier)
+            myLogger.info(`qualifierGroups}`);
+            myLogger.info(qualifierGroups);
+
+            // Define qualifier line
+            //
+            let strokeWidth = 6
+            let yMid = y_axis + strokeWidth
+            let qualifierLine = d3.line()
+                .curve(d3.curveMonotoneX)
+                .defined(function(d) { return d.color !== null; })
+                .x(function(d) {
+                    return xScale(d.date);
                 })
-                .scale(xScale);
-            var yAxis = d3.axisLeft().scale(yScale);
+                .y(yMid)
 
-            // Define lines
+            // Add qualifiers
             //
-            var maxValue = d3.max(TimeSeries[i].datapoints, d => d.concentration);
-            var minValue = d3.min(TimeSeries[i].datapoints, d => d.concentration);
-            var maxDate = lastSeriesDate;
-            var minDate = firstSeriesDate;
+            if(qualifierGroups.length > 0) {
 
-            // Set the domain of the axes
-            //
-            xScale.domain([minDate, maxDate]);
-            yScale.domain([minValue, maxValue]);
+                let dx = 10
+                let dy = 60
 
-            // Define line
+                // Add qualifier to legend
+                //
+                let descriptions = d3.select(`.timeseriesLegend-${svgID}`)
+                if(descriptions.size() < 1) {
+                    descriptions = timeseriesGraph.append("g")
+                        .attr("class", `timeseriesLegend-${svgID}`)
+                }
+                
+                let myText = descriptions.append("text")
+                    .attr("id", "qualifierLink")
+                    //.attr('class', qualifier)
+                    .attr('x', x_box_min)
+                    .attr('y', y_box_max)
+                    .attr('dx', dx)
+                    .attr('dy', dy)
+                    .style("text-anchor", "start")
+                    .style("font-family", "sans-serif")
+                    .style("font-weight", "400")
+                    .style("font-size", "0.9rem")
+                    .text('Data approval period')
+                
+                dy += 10
+
+                for(let ii = 0; ii < qualifierGroups.length; ii++) {
+                    let qualifier = qualifierGroups[ii][0];
+                    let data      = qualifierGroups[ii][1];
+                    let color     = 'orange'
+                    if(qualifier == 'Approved') color = 'blue'
+
+                    // Add the line
+                    //
+                    timeseriesGraph.append("path")
+                        .datum(data)
+                        .attr("id", qualifier)
+                        .attr("class", "qualifierLine")
+                        .attr("transform", `translate(${x_box_min}, ${y_box_min})`)
+                        .attr("stroke", color)
+                        .attr("stroke-width", strokeWidth)
+                        .attr("stroke-opacity", 1.0)
+                        .attr("d", qualifierLine)
+
+                    let myRect = descriptions.append("rect")
+                        .attr('id', 'qualifierLink')
+                        .attr('class', qualifier)
+                        .attr('x', `${x_box_min + dx}`)
+                        .attr('y', `${y_box_max + dy}`)
+                        .attr('width', `${strokeWidth * 2}`)
+                        .attr('height', `${strokeWidth}`)
+                        .attr('fill', color)
+                        .attr('stroke', color)
+                        .attr('stroke-width', strokeWidth)
+                        .on('mouseover', function(d, i) {
+                            let id = d3.select(this).attr('class');
+                            d3.selectAll("#" + id)
+                                .transition()
+                                .duration(100)
+                                .attr('stroke-width', strokeWidth)
+                                .attr('stroke', 'yellow')
+                        })
+                        .on('mouseout', function(d, i) {
+                            let id = d3.select(this).attr('class');
+                            d3.selectAll("#" + id)
+                                .transition()
+                                .duration(100)
+                                .attr('stroke-width', strokeWidth)
+                                .attr('stroke', color)
+                        })
+
+                    let myText = descriptions.append("text")
+                        .attr("id", "qualifierLink")
+                        .attr('class', qualifier)
+                        .attr('x', x_box_min)
+                        .attr('y', y_box_max)
+                        .attr('dx', `${dx + strokeWidth * 4}`)
+                        .attr('dy', `${dy + 6}`)
+                        .style("text-anchor", "start")
+                        .style("alignment-baseline", "center")
+                        .style("font-family", "sans-serif")
+                        .style("font-weight", "400")
+                        .style("font-size", "0.8rem")
+                        .text(qualifier)
+                        .on('mouseover', function(d, i) {
+                            var id = d3.select(this).attr('class');
+                            d3.selectAll("#" + id)
+                                .transition()
+                                .duration(100)
+                                .attr('stroke-width', strokeWidth)
+                                .attr('stroke', 'yellow')
+                        })
+                        .on('mouseout', function(d, i) {
+                            var id = d3.select(this).attr('class');
+                            d3.selectAll("#" + id)
+                                .transition()
+                                .duration(100)
+                                .attr('stroke-width', strokeWidth)
+                                .attr('stroke', color)
+                        })
+
+                    dx += strokeWidth * 20
+                }
+            }
+
+            // Define parameter line
             //
-            var line = d3.line()
+            let line = d3.line()
                 .curve(d3.curveMonotoneX)
                 .defined(function(d) { return d.concentration !== null; })
                 .x(function(d) {
@@ -1311,73 +1493,52 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
                 
             // Add the line
             //
-            svg.append("path")
+            timeseriesGraph.append("path")
                 .datum(TimeSeries[i].datapoints)
                 .attr("class", "line")
-                .attr("transform", "translate(" + [x_box_min, y_box_min].join(",") + ")")
+                .attr("transform", `translate(${x_box_min}, ${y_box_min})`)
                 .attr("d", line)
 
             // Show points
             //
-            svg.append("g")
+            timeseriesGraph.append("g")
                 .selectAll("circle")
                 .data(TimeSeries[i].datapoints)
                 .enter()
                 .append("circle")
-                .attr("transform", "translate(" + [x_box_min, y_box_min].join(",") + ")")
+                .attr("transform", `translate(${x_box_min}, ${y_box_min})`)
                 .attr("cx", d => xScale(d.date))
                 .attr("cy", d => yScale(d.concentration))
                 .attr("r", 3)
                 .style("opacity", 0)
-                .on("mouseover", d => {
-                    tooltip
-                        .html('Date: ' + formatDate(d.date) + '<br>Value: ' + d.concentration)
-                        .style("left", d3.event.pageX + "px")
-                        .style("top", d3.event.pageY - 28 + "px")
+                .on("mouseover", function(event, d) {
+                    tooltip.transition()
+                        .duration(200)
                         .style("opacity", 1)
+                    tooltip
+                        .html(`Date: ${formatDate(d.date)}<br>${d.qualifier} value: ${d.concentration}`)
+                        .style("left", event.pageX + "px")
+                        .style("top", event.pageY - 28 + "px")
                 })
                 .on("mouseout", () => {
-                    tooltip
-                        .style("opacity", 0);
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", 0)
                 });
             
-            // Add the X Axis
-            //
-            svg.append("g")
-                .attr("class", "x axis")
-                .attr("transform", "translate(" + [x_box_min, y_box_max].join(",") + ")")
-                .call(xAxis);
-
-            // Add the Y Axis
-            //
-            svg
-                .append("g")
-                .attr("class", "y axis")
-                .attr("transform", "translate(" + [x_box_min, y_box_min].join(",") + ")")
-                .call(yAxis)
-                .append("text")
-                .attr("class", "label")
-                .attr("y", 6)
-                .attr("dy", ".71em")
-                .attr("dx", ".71em")
-                .style("text-anchor", "beginning")
-                .text("Concentration");
-
             // Add site text to each panel
             //
-            var xLabel = x_box_min + x_axis * 0.5;
-            var yLabel = y_box_min + y_axis * 0.15;
-            var mySite = svg.append("text")
+            timeseriesGraph.append("text")
                 .attr("class", "siteText")
-                .attr("transform", "translate(" + [xLabel, yLabel].join(", ") + ")")
+                .attr("transform", `translate(${x_box_min + x_axis * 0.5}, ${y_box_min + y_axis * 0.15})`)
                 .attr("font-weight", "bold")
                 .style("text-anchor", "middle")
                 .style("opacity", "0.2")
                 .text([agency_cd, site_no].join(" "));
-            var yLabel = y_box_min + y_axis * 0.25;
-            var mySite = svg.append("text")
+
+            timeseriesGraph.append("text")
                 .attr("class", "siteText")
-                .attr("transform", "translate(" + [xLabel, yLabel].join(", ") + ")")
+                .attr("transform", `translate(${x_box_min + x_axis * 0.5}, ${y_box_min + y_axis * 0.25})`)
                 .attr("font-weight", "bold")
                 .style("text-anchor", "middle")
                 .style("opacity", "0.2")
@@ -1397,8 +1558,6 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
    
         message = `Contours of depth and water-quality measurements for site ${station_nm}`;
         openModal(message);
-        
-        const formatDate = d3.timeFormat("%b %d %Y");
 
          // Add text content above graph
         //
@@ -1446,212 +1605,373 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
 
         // SVG panels
         //
-        for (var i = 0; i < Contours.length; i++) {
-            var tsID    = Contours[i].tsid;
-            var myTitle = Contours[i].description;
+        for (let i = 0; i < Contours.length; i++) {
 
-            var svgID = ['svgContours', i].join("_");
-
-            var myText = textSize(myTitle);
-            var fontHeight = myText.height;
+            // Local Variables
+            //
+            const tsID = Contours[i].tsid;
+            const svgID = `svgContours_${i}`;
+            const unit_of_measure = Contours[i].unit_of_measure;
 
             // SVG canvas
             //
-            var svg = d3.select("#" + svgID);
+            const svg = d3.select(`#${svgID}`);
 
             // Check width of title
             //
-            var containerWidth = +d3.select("#" + svgID).style('width').slice(0, -2);
+            const myTitle = Contours[i].description;
+            let myText = textSize(myTitle);
+            let fontHeight = myText.height;
+            let fontWidth = myText.width / myTitle.length;
+
+            let containerWidth = +d3.select("#" + svgID).style('width').slice(0, -2);
 
             // Add site information
             //
             if (myText.width < containerWidth) {
-                var myText = svg.append("text")
+               svg.append("text")
                     .attr('x', x_box_min * 0.1)
-                    .attr('y', fontHeight * 0.75)
+                    .attr('y', fontHeight * 0.85)
                     .attr('class', 'site_title')
                     .text(myTitle);
             } else {
-                var fontHeight = myText.height;
-                var fontWidth = myText.width / myTitle.length;
-                var myTexts = myTitle.split(/,/);
-                var title = "";
-                var x_text = x_box_min * 0.1;
-                var y_text = fontHeight * 0.75;
-                for (var ii = 0; ii < myTexts.length; ii++) {
+                let myTexts = myTitle.split(/,/);
+                let title = "";
+                let x_text = x_box_min * 0.1;
+                let y_text = fontHeight * 0.85;
+                for (let ii = 0; ii < myTexts.length; ii++) {
                     if (([title, myTexts[ii]].join(',').length * fontWidth) > containerWidth) {
-                        var myText = svg.append("text")
+                        let mySiteText = svg.append("text")
                             .attr('x', x_text)
                             .attr('y', y_text)
                             .attr('class', 'site_title')
                             .text(title);
                         title = myTexts[ii];
                         x_text = x_box_min * 0.1 + fontWidth * 2.0;
-                        y_text += fontHeight * 0.75;
+                        y_text += fontHeight * 0.85;
                     } else {
                         if (title.length > 0) { title = [title, myTexts[ii]].join(","); } else { title = myTexts[ii]; }
                     }
                 }
 
-                var myText = svg.append("text")
+                svg.append("text")
                     .attr('x', x_text)
                     .attr('y', y_text)
                     .attr('class', 'site_title')
                     .text(title);
             }
 
-            // Set the ranges
-            //
-            var xScale = d3.scaleTime().range([0, x_axis]);
-            var yScale = d3.scaleLinear().range([y_axis, 0]);
-            var y2Scale = d3.scaleLinear().range([y_axis, 0]);
-
-            // Define axes
-            //
-            //var xAxis = d3.axisBottom().tickFormat(formatDate).scale(xScale);
-            var xAxis = d3.axisBottom()
-                .tickFormat(function(date) {
-                    if (d3.timeYear(date) < date) {
-                        return d3.timeFormat('%b %d')(date);
-                    } else {
-                        return d3.timeFormat('%Y')(date);
-                    }
-                })
-                .scale(xScale);
-            var yAxis = d3.axisLeft().scale(yScale);
-            var y2Axis = d3.axisRight().scale(y2Scale);
-
             // Process data
             //
             let pointData = []
-            for (var ii = 0; ii < Contours[i].datapoints.length; ii++) {
-                var depth = Contours[i].datapoints[ii].depth;
-                var value = Contours[i].datapoints[ii].concentration;
-                var date  = Contours[i].datapoints[ii].date;
-                Contours[i].datapoints[ii] = { 'date': date, 'depth': +depth, 'value': value };
-                if (value) { pointData.push({ 'date': +date, 'depth': +depth, 'value': value }); }
+            let ThresholdAbove = null;
+            let ThresholdBelow = null;
+            if(Contours[i].ThresholdAbove) ThresholdAbove = Contours[i].ThresholdAbove
+            if(Contours[i].ThresholdBelow) ThresholdBelow = Contours[i].ThresholdBelow
+            for (let ii = 0; ii < Contours[i].datapoints.length; ii++) {
+                
+                if(ThresholdAbove && Contours[i].datapoint[ii] > ThresholdAbove) Contours[i].datapoint[ii] = null
+                if(ThresholdBelow && Contours[i].datapoint[ii] < ThresholdBelow) Contours[i].datapoint[ii] = null
+
+                let depth = Contours[i].datapoints[ii].depth;
+                let value = Contours[i].datapoints[ii].concentration;
+                let date  = Contours[i].datapoints[ii].date;
+                let qualifier = Contours[i].datapoints[ii].qualifier;
+
+                Contours[i].datapoints[ii] = { 'date': date, 'depth': +depth, 'value': value, 'qualifier': qualifier };
+                if (value) { pointData.push({ 'date': +date, 'depth': +depth, 'value': value, 'qualifier': qualifier }); }
             }
 
-            // Define extent
+            // Graph
+            //
+            let contourGraph = svg.append("g")
+                .attr("class", `contourGraph-${svgID}`)
+
+            // X axis scale
             //
             var maxXaxis = lastDropDate;
             var minXaxis = firstDropDate;
-            var maxYaxis = d3.max(pointData, d => d.depth);
-            var minYaxis = d3.min(pointData, d => d.depth);
+
+            let xScale = d3.scaleTime()
+                .domain([minXaxis, maxXaxis]).nice()
+                .range([0, x_axis])
+
+            // X axis
+            //
+            let axisLine = contourGraph.append("g")
+                .attr("class", "timeseries-x-axis")
+                .attr("transform", `translate(${x_box_min}, ${y_box_max})`)
+                .call(d3.axisBottom(xScale).tickValues([]).tickSize(0))
+
+            let axisBottom = contourGraph.append("g")
+                .attr("class", "contour-x-axis")
+                .attr("transform", `translate(${x_box_min}, ${y_box_max + 10})`)
+                .call(d3.axisBottom(xScale)
+                      .tickFormat(d3.timeFormat('%b %d')))
+
+            let tickCount = xScale.ticks().length
+            axisBottom
+                .selectAll('g.contour-x-axis g.tick')
+                .append('text')
+                .attr("dy", "3em")
+                .attr("fill", "currentColor")
+                .text((e, i) => {
+                    if(i === 0 ) { return d3.timeFormat('%Y')(minXaxis) }
+                    if(i === tickCount - 1) { return d3.timeFormat('%Y')(maxXaxis) }
+                });
+            
+            contourGraph.append("g")
+                .append("text")
+                .attr("id", `contourGraph-Xaxislabel-${svgID}`)
+                .attr("class", "x-axislabel")
+                .attr("transform", `translate(${x_box_min + x_axis * 0.5}, ${y_box_max})`)
+                .attr("dy", "3em")
+                .attr("text-anchor", "middle")
+                .attr("font-family", "sans-serif")
+                .attr("font-weight", "700")
+                .text("Calendar");
+
+            // Y axis [left side in feet]
+            //
+            let maxYaxis = d3.max(pointData, d => d.depth);
+            let minYaxis = d3.min(pointData, d => d.depth);
+            
+            let yScale = d3.scaleLinear()
+                .domain([maxYaxis, minYaxis]).nice()
+                .range([y_axis, 0]);
+
+            // Retrieve tick values from the scale
+            //
+            const ticks = yScale.ticks();
+
+            // The actual tick step can be determined from the generated ticks.
+            //
+            const tickInterval = Math.abs(ticks[1] - ticks[0]);
+            let yMin = yScale.domain()[0];
+            let yMax = yScale.domain()[1];
+            myLogger.info(`Values maximum value ${maxYaxis} minimum value ${minYaxis} Y axis maximum ${yMax} minimum ${yMin} tickInterval ${tickInterval}`);
+            if(Math.abs((yMin - maxYaxis)) < tickInterval) yMin += tickInterval
+            yScale.domain([yMin, yMax])
+            
+            // Add the Y Axis
+            //
+            contourGraph.append("g")
+                .attr("class", "y axis")
+                .attr("transform", `translate(${x_box_min}, ${y_box_min})`)
+                .call(d3.axisLeft(yScale))
+
+            // Add the Y Axis label
+            //
+            contourGraph.append("text")
+                .attr("transform", `translate(${x_box_min * 0.5}, ${y_box_min + y_axis * 0.5}) rotate(-90)`)
+                .attr("font-weight", "bold")
+                .style("text-anchor", "middle")
+                .text("Depth, in meters");
+
+            // Y axis [right side in feet]
+            //
+            var maxY2axis = yMin * 3.28084;
+            var minY2axis = yMax * 3.28084;
+            let y2Scale = d3.scaleLinear()
+                .domain([maxY2axis, minY2axis]).nice()
+                .range([y_axis, 0]);
+            
+            // Add secondary Y Axis
+            //
+            contourGraph.append("g")
+                .attr("class", "y axis")
+                .attr("transform", `translate(${x_box_max}, ${y_box_min})`)
+                .call(d3.axisRight(y2Scale))
+
+             // Add secondary Y Axis label
+            //
+           contourGraph.append("text")
+                .attr("transform", `translate(${x_box_max + x_box_min * 0.5}, ${y_box_min + y_axis * 0.5}) rotate(-90)`)
+                .attr("font-weight", "bold")
+                .style("text-anchor", "middle")
+                .attr("dy", "0.5rem")
+                .text("Depth, in feet");
+
+            // Prepare color ramp
+            //
             var maxValue = d3.max(pointData, d => d.value);
             var minValue = d3.min(pointData, d => d.value);
-
-            // Set the domain of the axes
-            //
-            xScale.domain([minXaxis, maxXaxis]);
-            yScale.domain([maxYaxis, minYaxis]);
-
-            // Define secondary Y axis
-            //
-            var maxY2axis = d3.max(pointData, d => d.depth * 3.28084);
-            var minY2axis = d3.min(pointData, d => d.depth * 3.28084);
-            y2Scale.domain([maxY2axis, minY2axis]);
-
-            // Prepare
-            //
-            returnL = get_max_min(minValue, maxValue);
-            minValue = returnL[0]
-            maxValue = returnL[1]
-            interval = returnL[2]
+            [minValue, maxValue, interval] = get_max_min(minValue, maxValue);
             var numberTics = (maxValue - minValue) / interval;
 
             // Prepare a color palette for points
             //
-            var color = d3.scaleSequential(d3.interpolateCool)
-            color.domain([maxValue, minValue])
+            //var color = d3.scaleSequential(d3.interpolateCool)
+            //let color = d3.scaleSequential(d3.interpolatePuRd).domain([maxValue, minValue])
+            let color = d3.scaleSequential(d3.interpolateRdYlBu).domain([maxValue, minValue])
 
             // Show points
             //
-            svg.append("g")
+            contourGraph.append("g")
                 .selectAll("circle")
                 .data(pointData)
                 .enter()
                 .append("circle")
-                .attr("transform", "translate(" + [x_box_min, y_box_min].join(",") + ")")
+                .attr("transform", `translate(${x_box_min}, ${y_box_min})`)
                 .attr("cx", d => xScale(d.date))
                 .attr("cy", d => yScale(d.depth))
                 .attr("r", 3)
                 .attr("stroke", d => color(d.value))
                 .style("fill", d => color(d.value))
-                .on('mouseover',  d => {
-                    tooltip
-                        .html('Date: ' + formatDate(d.date) + '<br>Depth: ' + d.depth + '<br>Value: ' + d.value)
-                        .style("left", d3.event.pageX + "px")
-                        .style("top", d3.event.pageY - 28 + "px")
+                .on('mouseover', function(event, d) {
+                    tooltip.transition()
+                        .duration(200)
                         .style("opacity", 1)
+                    tooltip
+                        .html(`Date: ${formatDate(d.date)}<br>Depth: ${d.depth} m<br>${d.qualifier} value: ${d.value} ${unit_of_measure}`)
+                        .style("left", event.pageX + "px")
+                        .style("top", event.pageY - 28 + "px")
                 })
                 .on("mouseout", () => {
-                    tooltip
+                    tooltip.transition()
+                        .duration(200)
                         .style("opacity", 0);
                 });
 
-            // Add the X Axis
+            // Mark qualifier for Approved/Provisional records
             //
-            svg.append("g")
-                .attr("class", "x axis")
-                .attr("transform", "translate(" + [x_box_min, y_box_max].join(",") + ")")
-                .call(xAxis);
+            const qualifierGroups = d3.groups(pointData, d => d.qualifier)
+            myLogger.info(`qualifierGroups}`);
+            myLogger.info(qualifierGroups);
 
-            // Add the Y Axis
+            // Define qualifier line
             //
-            svg
-                .append("g")
-                .attr("class", "y axis")
-                .attr("transform", "translate(" + [x_box_min, y_box_min].join(",") + ")")
-                .call(yAxis)
-                .append("text")
-                .attr("class", "label")
-                .attr("y", 6)
-                .attr("dy", ".71em")
-                .attr("dx", ".71em")
-                .style("text-anchor", "beginning")
-                .text("Concentration");
+            let strokeWidth = 6
+            let yMid = y_axis + strokeWidth
+            let qualifierLine = d3.line()
+                .curve(d3.curveMonotoneX)
+                .defined(function(d) { return d.color !== null; })
+                .x(function(d) {
+                    return xScale(d.date);
+                })
+                .y(yMid)
 
-            // Add the Y Axis label
+            // Add qualifiers
             //
-            var xLabel = x_box_min * 0.5;
-            var yLabel = y_box_min + y_axis * 0.5;
-            var myText = svg.append("text")
-                .attr("transform", "translate(" + [xLabel, yLabel].join(", ") + ") rotate(-90)")
-                .attr("font-weight", "bold")
-                .style("text-anchor", "middle")
-                .text("Depth, in meters");
+            if(qualifierGroups.length > 0) {
 
-            // Add secondary Y Axis
-            //
-            svg.append("g")
-                .attr("class", "y axis")
-                .attr("transform", "translate(" + [x_box_max, y_box_min].join(",") + ")")
-                .call(y2Axis)
+                let dx = 10
+                let dy = 60
 
-            var xLabel = x_box_max + x_box_min * 0.5;
-            var yLabel = y_box_min + y_axis * 0.5;
-            var myText = svg.append("text")
-                .attr("transform", "translate(" + [xLabel, yLabel].join(", ") + ") rotate(90)")
-                .attr("font-weight", "bold")
-                .style("text-anchor", "middle")
-                .text("Depth, in feet");
+                // Add qualifier to legend
+                //
+                let descriptions = d3.select(`.contourLegend-${svgID}`)
+                if(descriptions.size() < 1) {
+                    descriptions = contourGraph.append("g")
+                        .attr("class", `contourLegend-${svgID}`)
+                }
+                
+                let myText = descriptions.append("text")
+                    .attr("id", "qualifierLink")
+                    //.attr('class', qualifier)
+                    .attr('x', x_box_min)
+                    .attr('y', y_box_max)
+                    .attr('dx', dx)
+                    .attr('dy', dy)
+                    .style("text-anchor", "start")
+                    .style("font-family", "sans-serif")
+                    .style("font-weight", "400")
+                    .style("font-size", "0.9rem")
+                    .text('Data approval period')
+                
+                dy += 10
+
+                for(let ii = 0; ii < qualifierGroups.length; ii++) {
+                    let qualifier = qualifierGroups[ii][0];
+                    let data      = qualifierGroups[ii][1];
+                    let color     = 'orange'
+                    if(qualifier == 'Approved') color = 'blue'
+
+                    // Add the line
+                    //
+                    contourGraph.append("path")
+                        .datum(data)
+                        .attr("id", qualifier)
+                        .attr("class", "qualifierLine")
+                        .attr("transform", `translate(${x_box_min}, ${y_box_min})`)
+                        .attr("stroke", color)
+                        .attr("stroke-width", strokeWidth)
+                        .attr("stroke-opacity", 1.0)
+                        .attr("d", qualifierLine)
+
+                    let myRect = descriptions.append("rect")
+                        .attr('id', 'qualifierLink')
+                        .attr('class', qualifier)
+                        .attr('x', `${x_box_min + dx}`)
+                        .attr('y', `${y_box_max + dy}`)
+                        .attr('width', `${strokeWidth * 2}`)
+                        .attr('height', `${strokeWidth}`)
+                        .attr('fill', color)
+                        .attr('stroke', color)
+                        .attr('stroke-width', strokeWidth)
+                        .on('mouseover', function(d, i) {
+                            let id = d3.select(this).attr('class');
+                            d3.selectAll("#" + id)
+                                .transition()
+                                .duration(100)
+                                .attr('stroke-width', strokeWidth)
+                                .attr('stroke', 'yellow')
+                        })
+                        .on('mouseout', function(d, i) {
+                            let id = d3.select(this).attr('class');
+                            d3.selectAll("#" + id)
+                                .transition()
+                                .duration(100)
+                                .attr('stroke-width', strokeWidth)
+                                .attr('stroke', color)
+                        })
+
+                    let myText = descriptions.append("text")
+                        .attr("id", "qualifierLink")
+                        .attr('class', qualifier)
+                        .attr('x', x_box_min)
+                        .attr('y', y_box_max)
+                        .attr('dx', `${dx + strokeWidth * 4}`)
+                        .attr('dy', `${dy + 6}`)
+                        .style("text-anchor", "start")
+                        .style("font-family", "sans-serif")
+                        .style("font-weight", "400")
+                        .style("font-size", "0.8rem")
+                        .text(qualifier)
+                        .on('mouseover', function(d, i) {
+                            var id = d3.select(this).attr('class');
+                            d3.selectAll("#" + id)
+                                .transition()
+                                .duration(100)
+                                .attr('stroke-width', strokeWidth)
+                                .attr('stroke', 'yellow')
+                        })
+                        .on('mouseout', function(d, i) {
+                            var id = d3.select(this).attr('class');
+                            d3.selectAll("#" + id)
+                                .transition()
+                                .duration(100)
+                                .attr('stroke-width', strokeWidth)
+                                .attr('stroke', color)
+                        })
+
+                    dx += strokeWidth * 20
+                }
+            }
 
             // Add site text to each panel
             //
-            var xLabel = x_box_min + x_axis * 0.5;
-            var yLabel = y_box_min + y_axis * 0.15;
-            var mySite = svg.append("text")
+            contourGraph.append("text")
                 .attr("class", "siteText")
-                .attr("transform", "translate(" + [xLabel, yLabel].join(", ") + ")")
+                .attr("transform", `translate(${x_box_min + x_axis * 0.5}, ${y_box_min + y_axis * 0.15})`)
                 .attr("font-weight", "bold")
                 .style("text-anchor", "middle")
                 .style("opacity", "0.2")
                 .text([agency_cd, site_no].join(" "));
-            var yLabel = y_box_min + y_axis * 0.25;
-            var mySite = svg.append("text")
+            
+            contourGraph.append("text")
                 .attr("class", "siteText")
-                .attr("transform", "translate(" + [xLabel, yLabel].join(", ") + ")")
+                .attr("transform", `translate(${x_box_min + x_axis * 0.5}, ${y_box_min + y_axis * 0.25})`)
                 .attr("font-weight", "bold")
                 .style("text-anchor", "middle")
                 .style("opacity", "0.2")
@@ -1661,25 +1981,21 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
             //
             // https://bl.ocks.org/starcalibre/6cccfa843ed254aa0a0d
             //
-            var legendFullHeight = y_axis;
-            var legendFullWidth = 50;
+            let legendFullHeight = y_axis;
+            let legendFullWidth = 50;
 
-            var legendMargin = { top: 20, bottom: 20, left: 5, right: 20 };
+            let legendMargin = { top: 20, bottom: 20, left: 5, right: 20 };
 
             // Use same margins as main plot
             //
-            var legendWidth = legendFullWidth - legendMargin.left - legendMargin.right;
-            var legendHeight = legendFullHeight - legendMargin.top - legendMargin.bottom;
+            let legendWidth = legendFullWidth - legendMargin.left - legendMargin.right;
             var legendHeight = y_axis;
 
-            var legend_x = x_box_max + x_box_min * 0.5 + legendMargin.right;
-            var legend_y = y_box_min;
-
-            var legendSvg = d3.select("#" + svgID)
+            let legendSvg = d3.select("#" + svgID)
+                .append('g')
                 .attr('width', legendFullWidth)
                 .attr('height', legendFullHeight)
-                .append('g')
-                .attr('transform', 'translate(' + legend_x + ',' + legend_y + ')');
+                .attr('transform', `translate(${x_box_max + x_box_min * 0.6 + legendMargin.right}, ${y_box_min})`)
 
             var gradient = legendSvg.append('defs')
                 .append('linearGradient')
@@ -1697,7 +2013,7 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
             var colorScale = [];
             for (var ii = 0; ii < 100; ii++) {
                 var t = 0.01 * ii;
-                var hexColor = d3.interpolateCool(t)
+                var hexColor = d3.interpolateRdYlBu(t)
                 colorScale.push([t, hexColor])
             }
 
@@ -1713,24 +2029,49 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
                 .attr('y1', 0)
                 .attr('width', legendWidth)
                 .attr('height', legendHeight)
+                .attr('stroke', 'black')
+                .attr('stroke-width', 1)
                 .style('fill', 'url(#gradient)');
 
             // Create a scale and axis for the legend
             //
-            var legendScale = d3.scaleLinear()
+            let legendScale = d3.scaleLinear()
                 .domain([minValue, maxValue])
                 .range([legendHeight, 0]);
 
-            var legendAxis = d3.axisRight()
+            let legendAxis = d3.axisRight()
                 .scale(legendScale)
                 .ticks(5);
 
             legendSvg.append("g")
+                .attr("id", `legend-axis-${svgID}`)
                 .attr("class", "legend axis")
-                .attr("transform", "translate(" + legendWidth + ", 0)")
+                .attr("transform", `translate(${legendWidth}, 0)`)
                 .call(legendAxis);
 
+            // Determine axis tic dimensions
+            //
+            axisInfo  = getSvg(`#legend-axis-${svgID}`)
+            xPosition = axisInfo.x
+            yPosition = axisInfo.y
+            ticWidth  = axisInfo.width
+            ticHeight = axisInfo.height
+
+            // Add the Legend Y Axis label
+            //
+            legendSvg.append("text")
+                .attr("transform", `translate(${legendWidth * 0.7}, ${legendHeight * 0.5}) rotate(-90)`)
+                .attr("font-weight", "bold")
+                .attr("text-anchor", "middle")
+                .text(`Concentration in ${unit_of_measure}`);
+
         }
+
+        d3.selectAll("#qualifierLink").on("click", function(event, d) {
+
+            window.open('https://waterdata.usgs.gov/provisional-data-statement/', '_blank')
+            
+        });
 
         contourCharts = true;
         
@@ -1740,25 +2081,30 @@ function plotLakeProfile(myHash, agency_cd, site_no, station_nm) {
     // No information
     //
     function noData(svgContainer) {
-        // No log label
-        //
-        label_txt = "No Time Series Information";
-        var label = "translate("
-        label += [(x_box_max + x_box_min) * 0.5, +(y_box_max + y_box_min) * 0.5].join(", ");
-        label += ") rotate(-90)";
 
-        var myText = svgContainer.append("text")
-            .attr("transform", label)
+        svgContainer.append("text")
+            .attr("transform", `translate(${x_box_min + x_axis * 0.5}, ${y_box_min + y_axis * 0.5}) rotate(-90)`)
             .attr('class', 'y_axis_label')
-            .text(label_txt);
+            .text("No Time Series Information");
     }
 
     function textSize(text) {
         if (!d3) return;
-        var container = d3.select('body').append('svg');
+        let container = d3.select('body').append('svg');
         container.append('text').attr('x', -99999).attr('y', -99999).text(text);
-        var size = container.node().getBBox();
+        let size = container.node().getBBox();
         container.remove();
         return { width: size.width, height: size.height };
+    }
+
+    function getSvg(svgElement) {
+        myLogger.info('getSvg')
+        myLogger.info(svgElement)
+
+        let svg = d3.select(svgElement); // Select your SVG element
+
+        let boundingBox = svg.node().getBBox(); // Get bounding box
+
+        return {x: boundingBox.x, y: boundingBox.y, width: boundingBox.width, height: boundingBox.height}
     }
 }
