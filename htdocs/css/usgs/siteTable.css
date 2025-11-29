@@ -4,8 +4,11 @@
  * The file siteTable.css is a css file to providing styling for Site-Information
  *  table. 
  *
- * version 2.03
- * July 10, 2023
+ $Id: /var/www/html/habs/css/usgs/siteTable.css, v 4.02 2025/10/04 21:52:21 llorzol Exp $
+ $Revision: 4.02 $
+ $Date: 2025/10/04 21:52:21 $
+ $Author: llorzol $
+ *
 */
 
 /*
@@ -35,33 +38,17 @@
 .divTable{
 	display: table;
 	width: 100%;
-        border-style: solid;
-        border-width: 0.1rem;
-        border-color: black;
-	/* background: #ccc; */
 }
 .divTableRow {
-	display: table-row;
-        border-style: solid;
-        border-width: 0.05rem;
-        border-color: grey;
-        border-top: 0.05rem;
-        border-bottom: 0.05rem;
+    display: table-row;
 }
 .divTableCell {
-	/* background: #FFF; */
 	display: table-cell;
-	padding: 3px 3px;
-        border-style: solid;
-        border-width: 0.05rem;
-        border-color: grey;
+	border-bottom: 0.1rem solid black;
+	padding: 0.5rem;
 }
 .divEmptyCell {
 	display: table-cell;
-	padding: 3px 3px;
-        border-bottom-style: solid;
-        border-bottom-width: 0.1rem;
-        border-bottom-color: black;
 }
 
 .divTableBody {
