@@ -3,8 +3,11 @@
  * Main is a JavaScript library to graph NwisWeb well construction information
  * for a site(s).
  *
- * version 2.03
- * June 3, 2024
+ $Id: /var/www/html/habs/javascripts/gages/urlArguments.js, v 2.04 2024/06/03 19:37:41 llorzol Exp $
+ $Revision: 2.04 $
+ $Date: 2024/06/03 19:37:41 $
+ $Author: llorzol $
+ *
  */
 
 /*
