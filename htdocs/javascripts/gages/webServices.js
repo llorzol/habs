@@ -3,8 +3,11 @@
  * A JavaScript library to retrieve NwisWeb information
  * such as the discrete groundwater measurements for a site(s).
  *
- * version 3.04
- * March 16, 2024
+ $Id: /var/www/html/habs/javascripts/gages/webServices.js, v 4.03 2025/10/11 18:14:28 llorzol Exp $
+ $Revision: 4.03 $
+ $Date: 2025/10/11 18:14:28 $
+ $Author: llorzol $
+ *
  */
 /*
 ###############################################################################
@@ -32,227 +35,484 @@
 
 var indexField = "site_no";
 
-// Parse IV measurements output from iv data service in RDB format
+// Parse Site information output from site data service in RDB format
 //
-function parseIvRDB(dataRDB) {
-    //console.log("parseIvRDB");
+function parseMonitoringLocationJson(data) {
+    myLogger.info("parseMonitoringLocationJson");
+    myLogger.debug(data);
 
-    var myRe = /^#/;
-    var lineRe = /\r?\n/;
-    var delimiter = '\t';
-    var myData = {};
-    var mySiteData = {};
-    var myParameterData = {};
-    var myAgingData = {};
-    var myColumnData = {};
-    var mySiteList = [];
+    let mySiteInfo = null;
 
-    var Fields = [];
-
-    // Parse from header explanations
+    // Parse data
     //
-    var mySiteInfo = /^# Data for the following/;
-    var mySiteInfoEnd = /^# --------------/;
-    var myParameterInfo = /^# Data provided for site/;
-    var myAgingInfo = /^# Data-value qualification codes included in this output/;
-    var noDataInfo   = /No sites found matching all criteria/;
-    var myTsIdList = [];
+    if(data.properties) {
+        mySiteInfo = data.properties;
+        mySiteInfo.dec_coord_datum_cd = data.properties.original_horizontal_datum_name;
+    }
+    if(data.geometry) {
+        mySiteInfo.dec_long_va = data.geometry.coordinates[0];
+        mySiteInfo.dec_lat_va = data.geometry.coordinates[1];
+    }
 
-    // Parse in lines
+    return mySiteInfo;
+
+}
+
+// Parse time-series meta information
+//
+function parseTimeSeriesJson(data) {
+    myLogger.info("parseTimeSeriesJson");
+    myLogger.debug(data);
+
+    let myParameterData = {};
+    
+    let profilesDescriptionRe   = /Variable Depth Profile Data/i;
+    let timeseriesDescriptionRe = /1 Meter Below The Surface/i;
+    let depthDescriptionRe      = /^Depth of sensor below water surface/i;
+
+    // Parse data
     //
-    var fileLines = dataRDB.split(lineRe);
+    if(data.numberReturned) {
+        if(data.numberReturned > 0) {
+            for(let i = 0; i < data.numberReturned; i++) {
 
-    // Column names on header line
-    //
-    while (fileLines.length > 0) {
-        var fileLine = jQuery.trim(fileLines.shift());
+                // Features
+                //
+                let myRecords = data.features[i];
+                //myLogger.info(myRecords);
+                
+                let myGuid = data.features[i].id;
 
-        if (fileLine.length < 1) {
-            continue;
-        }
+                myParameterData[myGuid] = {};
+                myParameterData[myGuid].parameter   = data.features[i].properties.parameter_code;
+                myParameterData[myGuid].unit_of_measure = data.features[i].properties.unit_of_measure;
 
-        // Header portion of input
-        //
-        if (myRe.test(fileLine)) {
-            
-            // No site information
-            //
-            if (noDataInfo.test(fileLine)) {
-                // console.log("mySiteData");
-                // console.log(mySiteData);
+                myParameterData[myGuid].begin_date = data.features[i].properties.begin.substring(0, 10);
+                myParameterData[myGuid].end_date   = data.features[i].properties.end.substring(0, 10);
 
-                return {
-                    "message": "No sites found matching all criteria",
-                    "myData": myData,
-                    "mySiteData": mySiteData,
-                    "myColumnData": myColumnData,
-                    "myParameterData": myParameterData,
-                    "myAgingData": myAgingData
-                };
-            }
-            
-            // Header portion for site information
-            //
-            if (mySiteInfo.test(fileLine)) {
-                //console.log("mySiteInfo");
-                while (fileLines.length > 0) {
-                    fileLine = jQuery.trim(fileLines.shift());
-                    if (myRe.test(fileLine)) {
-                        if (fileLine.length < 5) { break; }
-                    }
-                    if (mySiteInfoEnd.test(fileLine)) {
-                        break;
-                    }
-                    // console.log("fileLine");
-                    // console.log(fileLine);
-
-                    var Fields = fileLine.split(/\s+/);
-                    var blank = Fields.shift();
-                    var agency_cd = Fields.shift();
-                    var site_no = Fields.shift();
-                    var station_nm = Fields.join(" ");
-
-                    mySiteData[site_no] = {};
-                    mySiteData[site_no].agency_cd = agency_cd;
-                    mySiteData[site_no].station_nm = station_nm;
-                    mySiteList.push(site_no);
+                // Identify depth id and profile and timerseries ids
+                //
+                let seriesType = null
+                let parameter_description  = data.features[i].properties.parameter_description;
+                let sublocation_identifier = data.features[i].properties.sublocation_identifier;
+                let web_description        = data.features[i].properties.web_description;
+                //myLogger.info(`${parameter_description} ${sublocation_identifier} ${web_description} `);
+                
+                if(profilesDescriptionRe.test(sublocation_identifier) && depthDescriptionRe.test(parameter_description)) {
+                    seriesType = 'depth'
                 }
-                // console.log("mySiteData");
-                // console.log(mySiteData);
-            }
-
-            // Header portion for parameter information
-            //
-            else if (myParameterInfo.test(fileLine)) {
-                //console.log("myParameterInfo");
-                fileLines.shift(); // skip blank line
-
-                while (fileLines.length > 0) {
-                    fileLine = jQuery.trim(fileLines.shift());
-                    if (myRe.test(fileLine)) {
-                        if (fileLine.length < 5) { break; }
-                    }
-
-                    var Fields = fileLine.split(/\s+/);
-                    var blank = Fields.shift();
-                    var ts_id = Fields.shift();
-                    var parameter_cd = Fields.shift();
-                    var description = Fields.join(" ");
-
-                    myParameterData[ts_id] = {};
-                    myParameterData[ts_id].parameter = parameter_cd;
-                    myParameterData[ts_id].description = description;
-
-                    myTsIdList = jQuery.map(myParameterData, function(element, index) { return index }).sort();
+                else if (profilesDescriptionRe.test(sublocation_identifier)) {
+                    seriesType = 'profile'
                 }
-                //console.log("myParameterData");
-                //console.log(myParameterData);
-            }
-
-            // Header portion for approval-status
-            //
-            else if (myAgingInfo.test(fileLine)) {
-                //console.log("myAgingInfo");
-                while (fileLines.length > 0) {
-                    fileLine = jQuery.trim(fileLines.shift());
-                    // console.log("fileLine");
-                    // console.log(fileLine);
-                    if (myRe.test(fileLine)) {
-                        if (fileLine.length < 5) { break; }
-                    }
-
-                    var Fields = fileLine.split(/\s+/);
-                    var blank = Fields.shift();
-                    var iv_age_cd = Fields.shift();
-                    var description = Fields.join(" ");
-
-                    myAgingData[iv_age_cd] = description;
+                else if (timeseriesDescriptionRe.test(web_description)) {
+                    seriesType = 'timeseries'
                 }
-                // console.log("done myAgingInfo");
-                // console.log(myAgingData);
-            }
-        }
+                myParameterData[myGuid].parameter_description = parameter_description;
+                myParameterData[myGuid].sublocation_identifier = sublocation_identifier;
+                myParameterData[myGuid].web_description = web_description;
+                myParameterData[myGuid].seriesType = seriesType;
 
-        // Data portion of input
-        //
-        else {
-            site_no = jQuery.trim(mySiteList.shift());
-            // console.log("Data portion of input for site " + site_no);
-
-            // Check index column name in file
-            //
-            var Fields = fileLine.split(delimiter);
-            if (jQuery.inArray(indexField, Fields) < 0) {
-                var message = "Header line of column names does not contain " + indexField + " column\n";
-                message += "Header line contains " + Fields.join(", ");
-                openModal("Warning " + message);
-                fadeModal(3000);
-                return false;
-            }
-            myColumnData[site_no] = Fields;
-            // console.log("myColumns");
-            // console.log(site_no);
-            // console.log(myColumnData[site_no]);
-
-            // Format line in header portion [skip]
-            //
-            var fileLine = jQuery.trim(fileLines.shift());
-
-            // Data lines
-            //
-            while (fileLines.length > 0) {
-                fileLine = jQuery.trim(fileLines.shift());
-                if (myRe.test(fileLine)) {
-                    fileLines.unshift(fileLine);
-                    break;
-                }
-                if (fileLine.length > 1) {
+                // Thresholds
+                //
+                let myThresholds = myRecords.properties.thresholds;
+                for(let ii = 0; ii < myThresholds.length; ii++) {
+                    let myName   = myThresholds[ii].Name
+                    let myDescription   = myThresholds[ii].Description
+                    let myColor   = myThresholds[ii].DisplayColor
+                    let Type = myThresholds[ii].Type
+                    let ReferenceValue = null
                     
-                    var Values   = fileLine.split(delimiter);
-                    
-                    var site_no  = Values[jQuery.inArray(indexField, Fields)];
-                    var datetime = Values[jQuery.inArray('datetime', Fields)];
-                    var tz_cd    = Values[jQuery.inArray('tz_cd', Fields)];
-
-                    // Create object
-                    //
-                    if (!myData[site_no]) {
-                        myData[site_no] = {};
+                    let Periods   = myThresholds[ii].Periods
+                    for(let iii = 0; iii < Periods.length; iii++) {
+                        ReferenceValue = Periods[iii].ReferenceValue
+                        //let StartTime = Periods[i].StartTime
+                        //let EndTime   = Periods[i].EndTime
+                        //let AppliedTime = Periods[i].AppliedTime
                     }
 
-                    // Load values
-                    //
-                    for (let myTsId of myTsIdList) {
-                        //console.log(`TsID ${myTsId} Date ${datetime}`);
-
-                        if(!myData[site_no][myTsId]) { myData[site_no][myTsId] = []; }
-                        
-                        myParameter     = myParameterData[myTsId].parameter
-                        myField         = [myTsId, myParameter].join('_');
-                        let myValue     = Values[jQuery.inArray(myField, Fields)];
-                        var myQualifier = Values[jQuery.inArray(`${myField}_cd`, Fields)];
-                        //console.log(`TsID ${myTsId} myField ${myField} Value ${myValue} myQualifier ${myQualifier}`);
-                        if (myQualifier) {
-                            if(!myValue) { myValue = null; }
-                            myData[site_no][myTsId].push({ 'date': datetime, 'value': myValue, 'qualifier': myQualifier});
-                            //console.log(`TsID ${myTsId} myField ${myField} Date ${datetime} Value ${myValue} myQualifier ${myQualifier}`);
-                        }
-                    }
+                    myParameterData[myGuid][Type] = ReferenceValue;
                 }
             }
         }
     }
 
-    // console.log("myData");
-    // console.log(myData);
+    return myParameterData;
 
-    return {
-        "myData": myData,
-        "mySiteData": mySiteData,
-        "myColumnData": myColumnData,
-        "myParameterData": myParameterData,
-        "myAgingData": myAgingData
-    };
+}
+
+// Parse IV measurements output from iv data service in RDB format
+//
+function parseIvRDB(dataRDB, myParameters) {
+    myLogger.info("parseIvRDB");
+
+    let myParameterData = {};
+ 
+    // Split the data into lines
+    //
+    let fileLines = dataRDB.split(/\r?\n/);
+
+    // Filter out comment header lines
+    //
+    let commentLines = fileLines.filter(line => line.startsWith("#") && line.length > 3);
+    myLogger.debug('commentLines');
+    myLogger.debug(commentLines);
+
+    // Parse from header explanations
+    //
+    let myParameterInfo = /^# Data provided for site/;
+    let myAgingInfo = /^# Data-value qualification codes included in this output/;
+    let noDataInfo   = /No sites found matching all criteria/;
+    
+    let profilesDescriptionRe   = /Variable Depth Profile Data/;
+    let timeseriesDescriptionRe = /\[1 Meter Below The Surface\]/;
+    let depthDescriptionRe      = /^Depth of sensor below water surface/;
+
+    let profileFields = [];
+    let timeseriesFields = [];
+    let depthField;
+
+    // Parse qualifiers from header lines
+    //
+    while(commentLines.length > 0) {
+        
+        let fileLine = commentLines.shift().trim();
+
+        // No site information
+        //
+        if (noDataInfo.test(fileLine)) {
+            // myLogger.info("mySiteData");
+            // myLogger.info(mySiteData);
+
+            return { "message": "No sites found matching all criteria" };
+        }
+
+        // Header portion for parameter information
+        //
+        else if (myParameterInfo.test(fileLine)) {
+            //myLogger.info("myParameterInfo");
+
+            while (commentLines.length > 0) {
+                fileLine = jQuery.trim(commentLines.shift());
+
+                if (myAgingInfo.test(fileLine)) { break; }
+
+                let Fields = fileLine.split(/\s+/);
+                let blank = Fields.shift();
+                let ts_id = Fields.shift();
+                let parameter_cd = Fields.shift();
+                let description = Fields.join(" ");
+                let seriesType = null
+
+                // Identify depth ts_id and profile and timerseries ts_ids
+                //
+                if(profilesDescriptionRe.test(description) && depthDescriptionRe.test(description)) {
+                    depthField = `${ts_id}_${parameter_cd}`;
+                    seriesType = 'depth'
+                }
+                else if (profilesDescriptionRe.test(description)) {
+                    profileFields.push(`${ts_id}_${parameter_cd}`);
+                    seriesType = 'profile'
+                }
+                else if (timeseriesDescriptionRe.test(description) && !depthDescriptionRe.test(description)) {
+                    timeseriesFields.push(`${ts_id}_${parameter_cd}`);
+                    seriesType = 'timeseries'
+                }
+
+                myParameterData[ts_id] = {};
+                myParameterData[ts_id].parameter = parameter_cd;
+                myParameterData[ts_id].description = description;
+                myParameterData[ts_id].seriesType = seriesType;
+            }
+            
+            myLogger.info("myParameterData");
+            myLogger.info(myParameterData);
+            myLogger.info(`depthField ${depthField}`);
+            myLogger.info(`profileFields \n\t ${profileFields.join(' \n\t')}\n`);
+            myLogger.info(`timeseriesFields \n\t ${timeseriesFields.join(' \n\t')}\n`);
+       }
+    }
+    
+    // Filter out comment lines (assuming they start with '#')
+    //
+    let dataLines = fileLines.filter(line => !line.startsWith("#"));
+
+    // Remove format line
+    //
+    dataLines.splice(1, 1);
+     
+    // Data lines
+    //
+    let myData = d3.tsvParse(dataLines.join('\n'))
+    myLogger.info('IV POR');
+    myLogger.debug(myData);
+    let Fields = myData.columns;
+    myLogger.debug(Fields);
+
+    // build data fields
+    //
+    let myRe = /^\d+_\d+$/    
+    let ivFields = Fields.filter(line => myRe.test(line));
+    myLogger.info(`ivFields \n\t ${ivFields.join(' \n\t')}\n`);
+    let ymdhmOptions = { timeZone: timeZone,
+                         timeZoneName: "short",
+                         year: "numeric",
+                         month: "short",
+                         day: "numeric",
+                         hour: '2-digit',
+                         minute: '2-digit'
+                       };
+
+    // Loop through data
+    //
+    let myIvData = {};
+    for(let i = 0; i < myData.length; i++) {
+        let myRecord = myData[i];
+        let datetime = myRecord.datetime.trim().replace(' ','T');
+        let tz_cd    = myRecord.tz_cd
+        let myDate   = Date.parse(datetime);
+        //let myDate   = Date.parse(datetime).toLocaleString("en-US", { timeZone: timeZone });
+        //let myDate   = new Intl.DateTimeFormat("en-US", ymdhmOptions).format(date);
+        let myDepth  = myRecord[depthField]
+        
+        for(let myIvField of profileFields) {
+            if(myRecord[myIvField]) {
+                let [ts_id, myCode] = myIvField.split('_');
+                if(!myIvData[ts_id]) { myIvData[ts_id] = []; }
+                let myColumn  = `${myIvField}_cd`
+                let qualifier = 'Provisional'
+                if(myRecord[myColumn]) {
+                    if(myRecord[myColumn].includes('A')) {
+                        qualifier = 'Approved'
+                    }
+                }
+                myIvData[ts_id].push({ 'date': myDate, 'concentration': +myRecord[myIvField], 'depth': +myDepth, 'qualifier': qualifier})
+                myLogger.debug(`myIvData ${myIvField} ${myRecord[myIvField]} ${myRecord[myColumn]} ${qualifier}`);
+            }
+        }
+        
+        for(let myIvField of timeseriesFields) {
+            if(myRecord[myIvField]) {
+                let [ts_id, myCode] = myIvField.split('_');
+                if(!myIvData[ts_id]) { myIvData[ts_id] = []; }
+                let myColumn  = `${myIvField}_cd`
+                let qualifier = 'Provisional'
+                if(myRecord[myColumn]) {
+                    if(myRecord[myColumn].includes('A')) {
+                        qualifier = 'Approved'
+                    }
+                }
+                myIvData[ts_id].push({ 'date': myDate, 'concentration': +myRecord[myIvField], 'depth': +myDepth, 'qualifier': qualifier})
+                myLogger.debug(`myIvData ${myIvField} ${myRecord[myIvField]} ${myRecord[myColumn]} ${qualifier}`);
+            }
+        }
+    }
+    myLogger.info("myIvData");
+    myLogger.info(myIvData);
+
+    return [myIvData, myParameterData];
+
+}
+
+// Parse IV parameter descriptions
+//
+function parseParameterRDB(dataRDB) {
+    myLogger.info("parseParameterRDB");
+
+    let myParameterData = {};
+
+    // Split the data into lines
+    //
+    let fileLines = dataRDB.split(/\r?\n/);
+
+    // Filter out comment header lines
+    //
+    let commentLines = fileLines.filter(line => line.startsWith("#") && line.length > 3);
+    myLogger.debug('commentLines');
+    myLogger.debug(commentLines);
+
+    // Parse from header explanations
+    //
+    let myParameterInfo = /^# Data provided for site/;
+    let myAgingInfo = /^# Data-value qualification codes included in this output/;
+    let noDataInfo   = /No sites found matching all criteria/;
+    
+    let profilesDescriptionRe   = /Variable Depth Profile Data/;
+    let timeseriesDescriptionRe = /\[1 Meter Below The Surface\]/;
+    let depthDescriptionRe      = /^Depth of sensor below water surface/;
+
+    // Parse parameter information from header lines
+    //
+    while(commentLines.length > 0) {
+        
+        let fileLine = commentLines.shift().trim();
+
+        // No site information
+        //
+        if (noDataInfo.test(fileLine)) {
+            // myLogger.info("mySiteData");
+            // myLogger.info(mySiteData);
+
+            return myParameterData;
+        }
+
+        // Header portion for parameter information
+        //
+        else if (myParameterInfo.test(fileLine)) {
+            //myLogger.info("myParameterInfo");
+
+            while (commentLines.length > 0) {
+                fileLine = jQuery.trim(commentLines.shift());
+
+                if (myAgingInfo.test(fileLine)) { break; }
+
+                let Fields = fileLine.split(/\s+/);
+                let blank = Fields.shift();
+                let ts_id = Fields.shift();
+                let parameter_cd = Fields.shift();
+                let description = Fields.join(" ");
+                let seriesType = null
+
+                // Identify depth ts_id and profile and timerseries ts_ids
+                //
+                if(profilesDescriptionRe.test(description) && depthDescriptionRe.test(description)) {
+                    seriesType = 'depth'
+                }
+                else if (depthDescriptionRe.test(description)) {
+                    seriesType = 'profile'
+                }
+                else if (timeseriesDescriptionRe.test(description) && !depthDescriptionRe.test(description)) {
+                    seriesType = 'timeseries'
+                }
+
+                myParameterData[ts_id] = {};
+                myParameterData[ts_id].parameter = parameter_cd;
+                myParameterData[ts_id].description = description;
+                myParameterData[ts_id].seriesType = seriesType;
+            }
+            
+            myLogger.debug("myParameterData");
+            myLogger.debug(myParameterData);
+        }
+    }
+
+    return myParameterData;
+
+}
+
+// Parse Site information output from site data service in RDB format
+//
+function parseSitePorRDB(dataRDB) {
+    myLogger.info("parseSitePorRDB");
+    myLogger.debug(dataRDB);
+
+    let myPorData = {};
+    let mySiteInfo = null;
+    let myFields = {};
+ 
+    // Split the data into lines
+    //
+    let fileLines = dataRDB.split(/\r?\n/);
+
+    // Filter out comment header lines
+    //
+    let commentLines = fileLines.filter(line => line.startsWith("#") && line.length > 3);
+    myLogger.debug('commentLines');
+    myLogger.debug(commentLines);
+
+    // Parse from header explanations
+    //
+    let myFieldsInfo = /^# The following selected fields are included in this output/;
+    let noDataInfo   = /No sites found matching all criteria/;
+
+    // Parse qualifiers from header lines
+    //
+    while(commentLines.length > 0) {
+        
+        let fileLine = commentLines.shift().trim();
+
+        // No site information
+        //
+        if (noDataInfo.test(fileLine)) {
+            // myLogger.info("mySiteData");
+            // myLogger.info(mySiteData);
+
+            return { "message": "No sites found matching all criteria" };
+        }
+ 
+        // Header portion for site status information
+        //
+        else if (myFieldsInfo.test(fileLine)) {
+
+            while (commentLines.length > 0) {
+                let fileLine = commentLines.shift().trim();
+                fileLine = fileLine.replace(/^#\s+/,'')
+
+                let [myField, myDescription] = fileLine.split('--')
+                myField = myField.trim().toLowerCase()
+                myDescription = myDescription.trim()
+                if (!myFields[myField]) {
+                    myFields[myField] = myDescription
+                }
+            }
+        }
+    }
+    myLogger.debug('myFields');
+    myLogger.debug(myFields);
+
+    // Filter out comment lines (assuming they start with '#')
+    //
+    let dataLines = fileLines.filter(line => !line.startsWith("#"));
+
+    // Remove format line
+    //
+    dataLines.splice(1, 1);
+      
+    // Data lines
+    //
+    let myData = d3.tsvParse(dataLines.join('\n'))
+    myLogger.info('IV POR');
+    myLogger.debug(myData);
+    let Fields = myData.columns;
+    myLogger.debug(Fields);
+
+    // Loop through data
+    //
+    for(let i = 0; i < myData.length; i++) {
+        let myRecord = myData[i];
+
+        let ts_id        = myRecord.ts_id
+        let parm_cd      = myRecord.parm_cd
+        let count_nu     = myRecord.count_nu
+        let data_type_cd = myRecord.data_type_cd
+        let begin_date   = myRecord.begin_date
+        let end_date     = myRecord.end_date
+        let loc_web_ds   = myRecord.loc_web_ds
+
+        // Create hash
+        //
+        if (!mySiteInfo) {
+            mySiteInfo = {};
+            for(let ii = 0; ii < myData.length; ii++) {
+                mySiteInfo[Fields[ii]] = myRecord[Fields[ii]];
+            }
+        }
+
+        if (!myPorData[ts_id]) { myPorData[ts_id] = {}; }
+
+        myPorData[ts_id] = {
+            'parm_cd': parm_cd,
+            'loc_web_ds': loc_web_ds,
+            'begin_date': begin_date,
+            'end_date': end_date,
+            'count_nu': count_nu
+        };
+    }
+         myLogger.info('Done');
+         myLogger.info(mySiteInfo);
+         myLogger.info(myPorData);
+         myLogger.info(myFields);
+
+    return [mySiteInfo, myPorData, myFields];
 
 }
 
@@ -286,11 +546,7 @@ var wqFields = [
 // Parse Water-Quality measurements output from NwisWeb request in RDB format
 //
 function parseWqRDB(dataRDB) {
-    //console.log("parseWqRDB");
-
-    var myRe = /^#/;
-    var lineRe = /\r?\n/;
-    var delimiter = '\t';
+    myLogger.info("parseWqRDB");
     
     var myData = {};
     var myParameters = {};
@@ -335,7 +591,7 @@ function parseWqRDB(dataRDB) {
             fileLines.shift(); // skip line
             fileLines.shift(); // skip line
             fileLines.shift(); // skip line
-            //console.log("Parameter line ");
+            //myLogger.info("Parameter line ");
 
             while (fileLines.length > 0) {
                 fileLine = jQuery.trim(fileLines.shift());
@@ -514,7 +770,7 @@ function parseWqRDB(dataRDB) {
             
             for (var i = 0; i < myParamsL.length; i++) {
                 var Value = Values[jQuery.inArray(myParamsL[i].toLowerCase(), Fields)];
-                //console.log("Parameter " + myParamsL[i] + "--> " + Value);
+                //myLogger.info("Parameter " + myParamsL[i] + "--> " + Value);
                 if (!Value) { Value = ""; }
                 myData[site_no][count][myParamsL[i]] = Value;
             }
@@ -531,476 +787,6 @@ function parseWqRDB(dataRDB) {
         "meth_cds": meth_cds,
         "dqi_cds": dqi_cds,
         "rpt_lev_cds": rpt_lev_cds
-    };
-
-}
-
-// Groundwater measurements
-//
-var gwFields = [
-    'agency_cd',
-    'site_no',
-    'site_tp_cd',
-    'lev_dt',
-    'lev_tm',
-    'lev_tz_cd',
-    'lev_va',
-    'sl_lev_va',
-    'sl_datum_cd',
-    'lev_status_cd',
-    'lev_agency_cd',
-    'lev_dt_acy_cd',
-    'lev_acy_cd',
-    'lev_src_cd',
-    'lev_meth_cd',
-    'lev_age_cd'
-];
-
-// Parse Groundwater measurements output from gw data service in RDB format
-//
-function parseGwRDB(dataRDB) {
-    //console.log("parseGwRDB gwService");
-
-    var myRe = /^#/;
-    var lineRe = /\r?\n/;
-    var delimiter = '\t';
-    var myData = {};
-    var sl_datum_cds = {};
-    var lev_status_cds = {};
-    var lev_agency_cds = {};
-    var lev_dt_acy_cds = {};
-    var lev_acy_cds = {};
-    var lev_src_cds = {};
-    var lev_meth_cds = {};
-    var lev_age_cds = {};
-
-    var Fields = [];
-
-    // Parse from header explanations
-    //
-    var myAgencyInfo = /^# Referenced agency codes/;
-    var myStatusInfo = /^# Referenced water-level site status codes/;
-    var myReferenceInfo = /^# Referenced vertical datum codes/;
-    var myDateAcyInfo = /^# Referenced water-level date-time accuracy codes/;
-    var myLevAcyInfo = /^# Referenced water-level accuracy codes/;
-    var myLevSrcInfo = /^# Referenced source of measurement codes/;
-    var myMethodInfo = /^# Referenced method of measurement codes/;
-    var myAgingInfo = /^# Referenced water-level approval-status codes/;
-
-    // Parse in lines
-    //
-    var fileLines = dataRDB.split(lineRe);
-
-    // Column names on header line
-    //
-    while (fileLines.length > 0) {
-        var fileLine = jQuery.trim(fileLines.shift());
-        if (fileLine.length < 1) {
-            continue;
-        }
-        if (!myRe.test(fileLine)) {
-            break;
-        }
-
-        // Header portion for site status information
-        //
-        if (myStatusInfo.test(fileLine)) {
-            fileLines.shift(); // skip blank line
-
-            while (fileLines.length > 0) {
-                fileLine = jQuery.trim(fileLines.shift());
-                if (myRe.test(fileLine)) {
-                    if (fileLine.length < 5) { break; }
-                }
-
-                var Fields = fileLine.split(/\s+/);
-                var lev_status_cd = Fields[1];
-                if (lev_status_cd === '""') { lev_status_cd = "9"; }
-                lev_status_cds[lev_status_cd] = {};
-                lev_status_cds[lev_status_cd] = Fields.slice(2).join(" ");
-                //console.log("Status " + lev_status_cd.length + "--> " + Fields.slice(2).join(" "));
-            }
-        }
-
-        // Header portion for measuring agency codes information
-        //
-        if (myAgencyInfo.test(fileLine)) {
-            fileLines.shift(); // skip blank line
-
-            while (fileLines.length > 0) {
-                fileLine = jQuery.trim(fileLines.shift());
-                if (myRe.test(fileLine)) {
-                    if (fileLine.length < 5) { break; }
-                }
-
-                var Fields = fileLine.split(/\s+/);
-                var lev_agency_cd = Fields[1];
-                lev_agency_cds[lev_agency_cd] = {};
-                lev_agency_cds[lev_agency_cd] = Fields.slice(2).join(" ");
-            }
-        }
-
-        // Header portion for referenced vertical datum codes
-        //
-        if (myReferenceInfo.test(fileLine)) {
-            fileLines.shift(); // skip blank line
-
-            while (fileLines.length > 0) {
-                fileLine = jQuery.trim(fileLines.shift());
-                if (myRe.test(fileLine)) {
-                    if (fileLine.length < 5) { break; }
-                }
-
-                var Fields = fileLine.split(/\s+/);
-                var sl_datum_cd = Fields[1];
-                sl_datum_cds[sl_datum_cd] = {};
-                sl_datum_cds[sl_datum_cd] = Fields.slice(2).join(" ");
-            }
-        }
-
-        // Header portion for method codes
-        //
-        if (myMethodInfo.test(fileLine)) {
-            fileLines.shift(); // skip blank line
-
-            while (fileLines.length > 0) {
-                fileLine = jQuery.trim(fileLines.shift());
-                if (myRe.test(fileLine)) {
-                    if (fileLine.length < 5) { break; }
-                }
-
-                var Fields = fileLine.split(/\s+/);
-                var lev_meth_cd = Fields[1];
-                lev_meth_cds[lev_meth_cd] = {};
-                lev_meth_cds[lev_meth_cd] = Fields.slice(2).join(" ");
-            }
-        }
-
-        // Header portion for  water-level date-time accuracy
-        //
-        if (myDateAcyInfo.test(fileLine)) {
-            fileLines.shift(); // skip blank line
-
-            while (fileLines.length > 0) {
-                fileLine = jQuery.trim(fileLines.shift());
-                if (myRe.test(fileLine)) {
-                    if (fileLine.length < 5) { break; }
-                }
-
-                var Fields = fileLine.split(/\s+/);
-                var lev_dt_acy_cd = Fields[1];
-                lev_dt_acy_cds[lev_dt_acy_cd] = {};
-                lev_dt_acy_cds[lev_dt_acy_cd] = Fields.slice(2).join(" ");
-            }
-        }
-
-        // Header portion for water-level approval-status
-        //
-        if (myAgingInfo.test(fileLine)) {
-            fileLines.shift(); // skip blank line
-
-            while (fileLines.length > 0) {
-                fileLine = jQuery.trim(fileLines.shift());
-                if (myRe.test(fileLine)) {
-                    if (fileLine.length < 5) { break; }
-                }
-
-                var Fields = fileLine.split(/\s+/);
-                var lev_age_cd = Fields[1];
-                lev_age_cds[lev_age_cd] = {};
-                lev_age_cds[lev_age_cd] = Fields.slice(2).join(" ");
-            }
-        }
-
-        // Header portion for source of measurement
-        //
-        if (myLevSrcInfo.test(fileLine)) {
-            fileLines.shift(); // skip blank line
-
-            while (fileLines.length > 0) {
-                fileLine = jQuery.trim(fileLines.shift());
-                if (myRe.test(fileLine)) {
-                    if (fileLine.length < 5) { break; }
-                }
-
-                var Fields = fileLine.split(/\s+/);
-                var lev_src_cd = Fields[1];
-                lev_src_cds[lev_src_cd] = {};
-                lev_src_cds[lev_src_cd] = Fields.slice(2).join(" ");
-            }
-        }
-
-        // Header portion for water-level accuracy
-        //
-        if (myLevAcyInfo.test(fileLine)) {
-            fileLines.shift(); // skip blank line
-
-            while (fileLines.length > 0) {
-                fileLine = jQuery.trim(fileLines.shift());
-                if (myRe.test(fileLine)) {
-                    if (fileLine.length < 5) { break; }
-                }
-
-                var Fields = fileLine.split(/\s+/);
-                var lev_acy_cd = Fields[1];
-                lev_acy_cds[lev_acy_cd] = {};
-                lev_acy_cds[lev_acy_cd] = Fields.slice(2).join(" ");
-            }
-        }
-    }
-
-    // Check index column name in file
-    //
-    var Fields = fileLine.split(delimiter);
-    if (jQuery.inArray(indexField, Fields) < 0) {
-        var message = "Header line of column names does not contain " + indexField + " column\n";
-        message += "Header line contains " + Fields.join(", ");
-        message_dialog("Warning", message);
-        close_dialog();
-        return false;
-    }
-
-    // Format line in header portion [skip]
-    //
-    var fileLine = jQuery.trim(fileLines.shift());
-
-    // Data lines
-    //
-    var count = 0;
-    while (fileLines.length > 0) {
-        fileLine = jQuery.trim(fileLines.shift());
-        if (myRe.test(fileLine)) {
-            continue;
-        }
-        if (fileLine.length > 1) {
-            var Values = fileLine.split(delimiter);
-            var site_no = Values[jQuery.inArray(indexField, Fields)];
-
-            // Key does not exist [First time seen; create it]
-            //
-            if (!myData[site_no]) {
-                myData[site_no] = {};
-            }
-            if (typeof myData[site_no][count] === "undefined") {
-                myData[site_no][count] = {};
-            }
-
-            for (var i = 0; i < gwFields.length; i++) {
-                var Value = Values[jQuery.inArray(gwFields[i], Fields)];
-                if (!Value) {
-                    Value = "";
-                }
-                myData[site_no][count][gwFields[i]] = Value;
-            }
-            count++;
-        }
-    }
-
-    return {
-        "myData": myData,
-        "lev_status_cds": lev_status_cds,
-        "lev_agency_cds": lev_agency_cds,
-        "lev_dt_acy_cds": lev_dt_acy_cds,
-        "lev_acy_cds": lev_acy_cds,
-        "lev_src_cds": lev_src_cds,
-        "lev_meth_cds": lev_meth_cds,
-        "lev_age_cds": lev_age_cds,
-        "sl_datum_cds": sl_datum_cds
-    };
-
-}
-
-// Site with general information
-//
-var sitePorFields = [
-    'agency_cd',
-    'site_no',
-    'station_nm',
-    'site_tp_cd',
-    'dec_lat_va',
-    'dec_long_va',
-    'coord_acy_cd',
-    'dec_coord_datum_cd',
-    'alt_va',
-    'alt_acy_va',
-    'alt_datum_cd',
-    'huc_cd',
-    'data_type_cd',
-    'parm_cd',
-    'stat_cd',
-    'ts_id',
-    'loc_web_ds',
-    'medium_grp_cd',
-    'parm_grp_cd',
-    'srs_id',
-    'access_cd',
-    'begin_date',
-    'end_date',
-    'count_nu'
-];
-
-
-// Parse Site information output from site data service in RDB format
-//
-function parseSitePorRDB(dataRDB) {
-    //console.log("parseSiteRDB from siteService");
-
-    var myRe = /^#/;
-    var lineRe = /\r?\n/;
-    var delimiter = '\t';
-    var siteInfo = {};
-    var myData = {};
-    var parm_cds = [];
-    var data_type_cds = [];
-    var loc_web_cds = [];
-    
-    var Fields   = [];
-    var myFields = {};
-
-    // Parse from header explanations
-    //
-    var myFieldsInfo = /^# The following selected fields are included in this output/;
-    var noDataInfo   = /No sites found matching all criteria/;
-
-    // Parse in lines
-    //
-    var fileLines = dataRDB.split(lineRe);
-
-    // Column names on header line
-    //
-    while (fileLines.length > 0) {
-        var fileLine = jQuery.trim(fileLines.shift());
-        if (fileLine.length < 1) {
-            continue;
-        }
-        if (!myRe.test(fileLine)) {
-            break;
-        }
-
-        // Header portion for No site information
-        //
-        if (noDataInfo.test(fileLine)) {
-
-            console.log('No site information');
-    
-            return {
-                    "message": "No sites found matching all criteria",
-                    "myData": myData,
-                    "siteInfo": siteInfo,
-                    "parm_cds": parm_cds,
-                    "data_type_cds": data_type_cds,
-                    "loc_web_ds": loc_web_cds
-                };
-        }
- 
-        // Header portion for site status information
-        //
-        if (myFieldsInfo.test(fileLine)) {
-            fileLines.shift(); // skip blank line
-
-            while (fileLines.length > 0) {
-                fileLine = jQuery.trim(fileLines.shift());
-                if (myRe.test(fileLine)) {
-                    if (fileLine.length < 5) { break; }
-                }
-
-                var Fields = fileLine.split(/\s+/);
-                if (Fields[1].toLowerCase() in myFields === false)
-                {
-                    myFields[Fields[1].toLowerCase()] = Fields.slice(2).join(" ");
-                }
-            }
-        }
-    }
-
-    // Check index column name in file
-    //
-    var Fields = fileLine.split(delimiter);
-    if (jQuery.inArray(indexField, Fields) < 0) {
-        var message = "Header line of column names does not contain " + indexField + " column\n";
-        message += "Header line contains " + Fields.join(", ");
-        message_dialog("Warning", message);
-        close_dialog();
-        return false;
-    }
-
-    // Format line in header portion [skip]
-    //
-    var fileLine = jQuery.trim(fileLines.shift());
-
-    // Data lines
-    //
-    var count = 0;
-    while (fileLines.length > 0) {
-        fileLine = jQuery.trim(fileLines.shift());
-        if (myRe.test(fileLine)) {
-            continue;
-        }
-        if (fileLine.length > 1)
-        {
-            var Values   = fileLine.split(delimiter);
-            
-            var siteNo       = Values[jQuery.inArray(indexField, Fields)];
-            var ts_id        = Values[jQuery.inArray('ts_id', Fields)];
-            var parm_cd      = Values[jQuery.inArray('parm_cd', Fields)];
-            var count_nu     = Values[jQuery.inArray('count_nu', Fields)];
-            var data_type_cd = Values[jQuery.inArray('data_type_cd', Fields)];
-            var begin_date   = Values[jQuery.inArray('begin_date', Fields)];
-            var end_date     = Values[jQuery.inArray('end_date', Fields)];
-            var loc_web_ds   = Values[jQuery.inArray('loc_web_ds', Fields)];
-
-            // Create hash
-            //
-            if (typeof myData[siteNo] === "undefined") {
-                myData[siteNo] = {};
-            }
-            if (typeof myData[siteNo][ts_id] === "undefined") {
-                myData[siteNo][ts_id] = {};
-            }
-
-            myData[siteNo][ts_id] = {
-                'parm_cd': parm_cd,
-                'loc_web_ds': loc_web_ds,
-                'begin_date': begin_date,
-                'end_date': end_date,
-                'count_nu': count_nu
-            };
-
-            if (jQuery.inArray('parm_cd', Fields) > -1 &&
-                jQuery.inArray(parm_cd, parm_cds) < 0) {
-                parm_cds.push(parm_cd);
-            }
-            if (jQuery.inArray('data_type_cd', Fields) > -1 &&
-                jQuery.inArray(data_type_cd, data_type_cds) < 0) {
-                data_type_cds.push(data_type_cd);
-            }
-            if (jQuery.inArray('loc_web_ds', Fields) > -1 &&
-                jQuery.inArray(loc_web_ds, loc_web_cds) < 0) {
-                loc_web_cds.push(loc_web_ds);
-            }
-
-
-            if (typeof siteInfo[siteNo] === "undefined") {
-                
-                siteInfo[siteNo] = {};
-                
-                for (var i = 0; i < sitePorFields.length; i++) {
-                    var Value = Values[jQuery.inArray(sitePorFields[i], Fields)];
-                    if (typeof Value === "undefined" || Value.length < 1) {
-                        Value = "";
-                    }
-                    siteInfo[siteNo][sitePorFields[i]] = Value;
-                }
-            }
-        }
-    }
-
-    return {
-        "myData": myData,
-        "siteInfo": siteInfo,
-        "parm_cds": parm_cds,
-        "data_type_cds": data_type_cds,
-        "loc_web_ds": loc_web_cds
     };
 
 }
