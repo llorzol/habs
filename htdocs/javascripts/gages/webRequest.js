@@ -3,8 +3,11 @@
  *
  * WebRequest is a JavaScript library to make a Ajax request.
  *
- * version 1.09
- * November 15, 2016
+ $Id: /var/www/html/habs/javascripts/gages/webRequest.js, v 1.10 2024/04/05 19:27:37 llorzol Exp $
+ $Revision: 1.10 $
+ $Date: 2024/04/05 19:27:37 $
+ $Author: llorzol $
+ *
 */
 
 /*
