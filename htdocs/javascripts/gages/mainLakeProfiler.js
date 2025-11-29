@@ -3,8 +3,11 @@
  * Main is a JavaScript library to graph NwisWeb information
  * for a site(s).
  *
- * version 3.13
- * June 4, 2024
+ $Id: /var/www/html/habs/javascripts/gages/mainLakeProfiler.js, v 4.02 2025/10/07 19:09:09 llorzol Exp $
+ $Revision: 4.02 $
+ $Date: 2025/10/07 19:09:09 $
+ $Author: llorzol $
+ *
  */
 
 /*
@@ -30,6 +33,14 @@
 # DEALINGS IN THE SOFTWARE.
 ###############################################################################
 */
+
+// loglevel
+//
+let myLogger = log.getLogger('myLogger');
+//myLogger.setLevel('debug');
+myLogger.setLevel('info');
+
+var timeZone = 'America/Vancouver'
 
 var site_no      = null;
 var mySiteHash   = {};
@@ -66,55 +77,51 @@ message    += "from 8 to 15 digits long (example 433152121281301). ";
 
 // Prepare when the DOM is ready
 //
-$(document).ready(function()
- {
-   // Current url
-   //-------------------------------------------------
-   var url     = new URL(window.location.href);
-   console.log("Current Url " + window.location.href);
+$(document).ready(function() {
 
-   // Parse
-   //-------------------------------------------------
-   site         = url.searchParams.get('site');
-   site_no      = url.searchParams.get('site_no');
-   numberOfDays = url.searchParams.get('numberOfDays');
-   startingDate = url.searchParams.get('startingDate');
-   endingDate   = url.searchParams.get('endingDate');
-   console.log(`Site ${site}`);
-   console.log(`Site_no ${site_no}`);
-   console.log(`startingDate ${startingDate}`);
-   console.log(`endingDate ${endingDate}`);
+    // Current url
+    //-------------------------------------------------
+    var url     = new URL(window.location.href);
+    myLogger.info("Current Url " + window.location.href);
 
-   // Check arguments
-   //-------------------------------------------------
-   if(site)
-     {
-       if(!checkSiteNo(site))
-          {
+    // Parse
+    //-------------------------------------------------
+    site         = url.searchParams.get('site');
+    site_no      = url.searchParams.get('site_no');
+    numberOfDays = url.searchParams.get('numberOfDays');
+    startingDate = url.searchParams.get('startingDate');
+    endingDate   = url.searchParams.get('endingDate');
+    myLogger.info(`Site ${site}`);
+    myLogger.info(`Site_no ${site_no}`);
+    myLogger.info(`startingDate ${startingDate}`);
+    myLogger.info(`endingDate ${endingDate}`);
+
+    // Check arguments
+    //-------------------------------------------------
+    if(site) {
+        if(!checkSiteNo(site)) {
             openModal(message);
             fadeModal(6000);
             return;
-          }
-       site_no = site;
-     }
+        }
+        site_no = site;
+    }
 
-   else if(site_no)
-     {
-       if(!checkSiteNo(site_no))
-          {
+    else if(site_no) {
+        if(!checkSiteNo(site_no)) {
             openModal(message);
             fadeModal(6000);
             return;
-          }
-     }
+        }
+    }
 
-   else {
+    else {
 
-     // Loading message
-     //
-     openModal(message);
-     fadeModal(3000);
-   }
+        // Loading message
+        //
+        openModal(message);
+        fadeModal(3000);
+    }
 
    if (numberOfDays) {
      if(!checkNumber(numberOfDays)) { return null; }
@@ -153,49 +160,20 @@ $(document).ready(function()
    message = "Requesting general site information and  water-quality measurements for site " + site_no;
    openModal(message);
 
-   //console.log(site_no)
+   //myLogger.info(site_no)
 
    // Build ajax requests
    //
    var webRequests  = [];
-   
-   // Request for current conditions information
-   //
-   var request_type = "GET";
-   var script_http  = `https://waterservices.usgs.gov/nwis/iv/?format=rdb&sites=${site_no}&siteStatus=all`;
-   var data_http    = "";
-         
-   var dataType     = "text";
-      
-   // Web request
-   //
-   webRequests.push($.ajax( {
-     method:   request_type,
-     url:      script_http,
-     data:     data_http, 
-     dataType: dataType,
-     success: function (myData) {
-         //message = "Processed current conditions information";
-         //openModal(message);
-         //fadeModal(2000);
-         myDataInfo   = parseIvRDB(myData);
-         myParameters = myDataInfo.myParameterData;
-     },
-     error: function (error) {
-       message = `Failed to load current conditions information ${error}`;
-       openModal(message);
-       fadeModal(2000);
-       return false;
-     }
-   }));
 
    // Request for period of record information
    //
    var request_type = "GET";
-   var script_http  = `https://waterservices.usgs.gov/nwis/site/?format=rdb&sites=${site_no}&seriesCatalogOutput=true&outputDataTypeCd=iv&siteStatus=all&hasDataTypeCd=iv`;
+   //var script_http  = `https://waterservices.usgs.gov/nwis/site/?format=rdb&sites=${site_no}&seriesCatalogOutput=true&outputDataTypeCd=iv&siteStatus=all&hasDataTypeCd=iv`;
+   var script_http  = `https://api.waterdata.usgs.gov/ogcapi/v0/collections/monitoring-locations/items/USGS-${site_no}?f=json&lang=en-US`
    var data_http    = "";
          
-   var dataType     = "text";
+   var dataType     = "json";
       
    // Web request
    //
@@ -208,40 +186,76 @@ $(document).ready(function()
          //message = "Processed period of record information";
          //openModal(message);
          //fadeModal(2000);
-         myDataInfo = parseSitePorRDB(myData);
-         //console.log('myDataInfo');
-         //console.log(myDataInfo);
-         myParmInfo  = myDataInfo.myData[site_no];
-         //console.log('myParmInfo');
-         //console.log(myParmInfo);
-         mySiteInfo  = myDataInfo.siteInfo[site_no];
-         //console.log('mySiteInfo');
-         //console.log(mySiteInfo);
+         mySiteInfo = parseMonitoringLocationJson(myData);
+         myLogger.info('Done parseMonitoringLocation');
+         myLogger.info(mySiteInfo);
      },
-     error: function (error) {
-       message = `Failed to load period of record information ${error}`;
-       openModal(message);
-       fadeModal(2000);
-       return false;
-     }
+       error: function (error) {
+           message = `Failed to load period of record information for site ${site_no} status ${error.status} ${error.statusText}`;
+           openModal(message);
+           fadeModal(2000);
+           myLogger.info(message)
+           return false;
+       }
+   }));
+
+   // Request for thresholds information
+   //
+   var request_type = "GET";
+   var script_http  = `https://api.waterdata.usgs.gov/ogcapi/v0/collections/time-series-metadata/items?limit=10000&properties=unit_of_measure,begin,end,parameter_code,thresholds,sublocation_identifier,web_description,parameter_description&skipGeometry=true&computation_identifier=Instantaneous&monitoring_location_id=USGS-${site_no}&f=json`
+   var data_http    = "";
+         
+   var dataType     = "json";
+      
+   // Web request
+   //
+   webRequests.push($.ajax( {
+     method:   request_type,
+     url:      script_http,
+     data:     data_http, 
+     dataType: dataType,
+     success: function (myData) {
+         //message = "Processed thresolds information";
+         //openModal(message);
+         //fadeModal(2000);
+         myParameters = parseTimeSeriesJson(myData);
+         myLogger.info('Done parseTimeSeriesJson');
+         myLogger.info(myParameters);
+     },
+       error: function (error) {
+           message = `Failed to thresolds information for site ${site_no} status ${error.status} ${error.statusText}`;
+           openModal(message);
+           fadeModal(2000);
+           myLogger.info(message)
+           return false;
+       }
    }));
 
    // Run ajax requests
    //
    $.when.apply($, webRequests).then(function() {
 
+       // Check for data
+       //
+       if (mySiteInfo.message) {
+           myLogger.error(message);
+           openModal(message);
+           fadeModal(2000);
+           return false;
+       }
+
         // Web request
         //
-       callWqService(mySiteInfo, myParameters, myParmInfo);
+       callWqService(mySiteInfo, myParameters);
    });
   })
 
-function callWqService(mySiteInfo, myParameters, myParmInfo) {
-    console.log("callWqService");
+function callWqService(mySiteInfo, myParameters) {
+    myLogger.info("callWqService");
 
     // Check for data
     //
-    if (!myParameters || !myParmInfo) {
+    if (!myParameters) {
 
         // Warning message
         //
@@ -256,51 +270,44 @@ function callWqService(mySiteInfo, myParameters, myParmInfo) {
 
     // Update specific site information
     //
-    agency_cd  = mySiteInfo['agency_cd'];
-    station_nm = mySiteInfo['station_nm'];
+    agency_cd  = mySiteInfo['agency_code'];
+    station_nm = mySiteInfo['monitoring_location_name'];
 
     $(document).prop('title', 'Lake Profile for site ' + site_no);
     $('#site_text').html(['HAB Site', agency_cd, site_no, '</br>', station_nm].join(' '));
     
     // Build period of record for water-quality information
     //
-    var myTsIdList  = jQuery.map(myParmInfo, function(element,index) {return index}).sort();
-    var myLocWeb    = /Variable Depth Profile Data/;
+    var myIdList  = Object.keys(myParameters).sort();
     var myBeginDate = null;
     var myEndDate   = null;
 
-    for(myTsId of myTsIdList)
-    {
-        var myDescription = myParameters[myTsId].description;
-        var myParmCd      = myParmInfo[myTsId].parm_cd;
-        var beginDate     = myParmInfo[myTsId].begin_date.trim();
-        var endDate       = myParmInfo[myTsId].end_date.trim();
-                
-        myParmInfo[myTsId].description = myDescription;
-                
-        if (myLocWeb.test(myDescription))
-        {
-            if (!myBeginDate) { myBeginDate = dayjs(beginDate,'YYYY-MM-DD'); }
-            myDate = dayjs(beginDate,'YYYY-MM-DD');
-            if(myDate < myBeginDate) { myBeginDate = myDate; }
-            
-            if (!myEndDate) { myEndDate = dayjs(endDate,'YYYY-MM-DD'); }
-            myDate = dayjs(endDate,'YYYY-MM-DD');
-            if(myDate > myEndDate) { myEndDate = myDate; }
-         }
+    for(myId of myIdList) {
+        let myParmCd      = myParameters[myId].parameter;
+        let beginDate     = myParameters[myId].begin_date.trim();
+        let endDate       = myParameters[myId].end_date.trim();
+
+        if (!myBeginDate) { myBeginDate = dayjs(beginDate,'YYYY-MM-DD'); }
+        let startingDate = dayjs(beginDate,'YYYY-MM-DD');
+        if(startingDate < myBeginDate) { myBeginDate = startingDate; }
+
+        if (!myEndDate) { myEndDate = dayjs(endDate,'YYYY-MM-DD'); }
+        let endingDate = dayjs(endDate,'YYYY-MM-DD');
+        if(endingDate > myEndDate) { myEndDate = endingDate; }
+
+        myParameters[myId].days = endingDate.diff(startingDate, 'days');
     }
     startingPorDate = dayjs(myBeginDate).format('YYYY-MM-DD');
     endingPorDate   = dayjs(myEndDate).format('YYYY-MM-DD');
-    console.log(`Period of Record from ${startingPorDate} to ${endingPorDate}`);
+    myLogger.info(`Period of Record from ${startingPorDate} to ${endingPorDate}`);
       
     // User specified dates
     //
-    if(startingDate && endingDate)
-    {
-        //console.log(`User specified dates from ${startingDate} to ${endingDate}`);
+    if(startingDate && endingDate) {
+        //myLogger.info(`User specified dates from ${startingDate} to ${endingDate}`);
         
-        var myStartingDate = dayjs(startingDate);
-        var myEndingDate   = dayjs(endingDate);
+        let myStartingDate = dayjs(startingDate);
+        let myEndingDate   = dayjs(endingDate);
 
         startingDate = dayjs(myStartingDate).format('YYYY-MM-DD');
         endingDate   = dayjs(myEndingDate).format('YYYY-MM-DD');
@@ -308,13 +315,12 @@ function callWqService(mySiteInfo, myParameters, myParmInfo) {
       
     // User specified days
     //
-    else if(numberOfDays)
-    {
-        console.log(`User specified days ${numberOfDays}`);
+    else if(numberOfDays) {
+        myLogger.info(`User specified days ${numberOfDays}`);
         defaultDays        = numberOfDays;
         
-        var myStartingDate = dayjs().subtract(numberOfDays, 'days');
-        var myEndingDate   = dayjs();
+        let myStartingDate = dayjs().subtract(numberOfDays, 'days');
+        let myEndingDate   = dayjs();
 
         startingDate       = dayjs(myStartingDate).format('YYYY-MM-DD');
         endingDate         = dayjs(myEndingDate).format('YYYY-MM-DD');
@@ -322,13 +328,11 @@ function callWqService(mySiteInfo, myParameters, myParmInfo) {
       
     // Default 200 days
     //
-    else
-    {
-        //console.log('Default 200 days');
+    else {
+        //myLogger.info('Default 200 days');        
         
-        
-        var myStartingDate = dayjs().subtract(defaultDays, 'days');
-        var myEndingDate   = dayjs();
+        let myStartingDate = dayjs().subtract(defaultDays, 'days');
+        let myEndingDate   = dayjs();
 
         startingDate       = dayjs(myStartingDate).format('YYYY-MM-DD');
         endingDate         = dayjs(myEndingDate).format('YYYY-MM-DD');
@@ -336,28 +340,26 @@ function callWqService(mySiteInfo, myParameters, myParmInfo) {
       
     // Check starting/ending dates
     //
-    var myStartingDate    = dayjs(startingDate,'YYYY-MM-DD');
-    var myEndingDate      = dayjs(endingDate,'YYYY-MM-DD');
-    var myStartingPorDate = dayjs(startingPorDate,'YYYY-MM-DD');
-    var myEndingPorDate   = dayjs(endingPorDate,'YYYY-MM-DD');
+    let myStartingDate    = dayjs(startingDate,'YYYY-MM-DD');
+    let myEndingDate      = dayjs(endingDate,'YYYY-MM-DD');
+    let myStartingPorDate = dayjs(startingPorDate,'YYYY-MM-DD');
+    let myEndingPorDate   = dayjs(endingPorDate,'YYYY-MM-DD');
 
     maxUserDays           = myEndingDate.diff(myStartingDate, 'days');
     maxDays               = myEndingPorDate.diff(myStartingPorDate, 'days');
     
-    console.log(`Specified dates from ${startingDate} to ${endingDate} is ${maxUserDays} days`);
-    console.log(`POR dates from ${startingPorDate} to ${endingPorDate} is ${maxDays} days`);
+    myLogger.info(`Specified dates from ${startingDate} to ${endingDate} is ${maxUserDays} days`);
+    myLogger.info(`POR dates from ${startingPorDate} to ${endingPorDate} is ${maxDays} days`);
 
     // Graph interval inside of period of record
     //
-    if(myStartingDate >= myStartingPorDate && myEndingDate <= myEndingPorDate)
-    {
+    if(myStartingDate >= myStartingPorDate && myEndingDate <= myEndingPorDate) {
         var doNothing = true;
     }
 
     // Graph interval before period of record
     //
-    else if(myEndingDate <= myStartingPorDate)
-    {
+    else if(myEndingDate <= myStartingPorDate) {
         endingDate     = endingPorDate;
         
         myStartingDate = dayjs(myendingPorDate).subtract(defaultDays, 'days');
@@ -367,8 +369,7 @@ function callWqService(mySiteInfo, myParameters, myParmInfo) {
 
     // Graph interval past period of record
     //
-    else if(myStartingDate >= myEndingPorDate)
-    {
+    else if(myStartingDate >= myEndingPorDate) {
         endingDate     = endingPorDate;
         
         myStartingDate = dayjs(endingPorDate).subtract(defaultDays, 'days');
@@ -378,8 +379,7 @@ function callWqService(mySiteInfo, myParameters, myParmInfo) {
 
     // Graph interval overlaps before period of record
     //
-    else if(myStartingDate < myStartingPorDate && myEndingDate < myEndingPorDate)
-    {
+    else if(myStartingDate < myStartingPorDate && myEndingDate < myEndingPorDate) {
         myStartingDate = dayjs(myEndingDate).subtract(defaultDays, 'days');
         startingDate   = dayjs(myStartingDate).format('YYYY-MM-DD');
         if(myStartingDate < myStartingPorDate) { startingDate = startingPorDate; }
@@ -387,8 +387,7 @@ function callWqService(mySiteInfo, myParameters, myParmInfo) {
 
     // Graph interval overlaps past period of record
     //
-    else if(myStartingDate >= myStartingPorDate && myEndingDate >= myEndingPorDate)
-    {
+    else if(myStartingDate >= myStartingPorDate && myEndingDate >= myEndingPorDate) {
         endingDate     = endingPorDate;
         
         myStartingDate = dayjs(myEndingPorDate).subtract(defaultDays, 'days');
@@ -396,13 +395,14 @@ function callWqService(mySiteInfo, myParameters, myParmInfo) {
         if(myStartingDate < myStartingPorDate) { startingDate = startingPorDate; }
     }
     
-    console.log(`Specified requested dates from ${startingDate} to ${endingDate}`);
+    myLogger.info(`Specified requested dates from ${startingDate} to ${endingDate}`);
     
     // Request for iv service information
     //
     var request_type = "GET";
     var script_http  = `https://nwis.waterservices.usgs.gov/nwis/iv/?format=rdb&sites=${site_no}`;
     script_http     += `&startDT=${startingDate}&endDT=${endingDate}&siteStatus=all`;
+    var script_http  = `data/iv-${site_no}.txt`;
     var data_http    = "";
     
     var dataType     = "text";
@@ -413,8 +413,8 @@ function callWqService(mySiteInfo, myParameters, myParmInfo) {
 }
 
 function lakeProfilerService(dataRDB) {
-    //console.log("lakeProfilerService");
-    //console.log(dataRDB);
+    //myLogger.info("lakeProfilerService");
+    //myLogger.info(dataRDB);
    
    //closeModal();
    message = "Processing water-quality measurements for site " + site_no;
@@ -436,13 +436,14 @@ function lakeProfilerService(dataRDB) {
 
     // Parsing routine
     //
-    myHash = parseIvRDB(dataRDB);
-    //console.log('myHash');
-    //console.log(myHash);
+    [myIvData, myParameterData] = parseIvRDB(dataRDB, myParameters);
+    myLogger.info('parseIvRDB');
+    myLogger.info(myIvData);
+    myLogger.info(myParameterData);
 
     // Check for data
     //
-    if (myHash.message) {
+    if (myIvData.message) {
 
         $('#site_text').append(['</br>', '<p class="text-danger">Currently no data available</p>'].join(' '));
         
@@ -458,15 +459,40 @@ function lakeProfilerService(dataRDB) {
         return false;
     }
 
+    // Correlate parameter and iv results
+    //
+    let myIdList   = Object.keys(myParameters).sort();
+    let myTsidList = Object.keys(myParameterData).sort();
+
+    for(myId of myIdList) {
+        let parameter_description  = myParameters[myId].parameter_description
+        let sublocation_identifier = myParameters[myId].sublocation_identifier
+        let web_description        = myParameters[myId].web_description
+        let id = parameter_description
+        if(sublocation_identifier) { id += `, ${sublocation_identifier}` }
+        if(web_description) { id += `, [${web_description}]` }
+
+        myParameters[myId].tsid = null
+
+        for(myTsid of myTsidList) {
+            let description  = myParameterData[myTsid].description;
+            if(description == id) {
+                myParameters[myId].tsid = myTsid
+                myParameters[myId].data = myIvData[myTsid]
+            }
+        }
+        
+                                                           
+    }
+
     // Build data for site
     //
     var myDataHash = {};
     myDataHash.startingDate    = startingDate;
     myDataHash.endingDate      = endingDate;
-    myDataHash.myAgingData     = myHash.myAgingData;
-    myDataHash.myParameterData = myParmInfo;
-    myDataHash.mySiteData      = myHash.mySiteData[site_no];    
-    myDataHash.myData          = myHash.myData[site_no];    
+    myDataHash.myParameterData = myParameters;
+    myDataHash.mySiteData      = mySiteInfo;    
+    myDataHash.myData          = myIvData;    
 
     // Call plotting routine
     //
