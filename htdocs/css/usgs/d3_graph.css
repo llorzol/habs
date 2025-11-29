@@ -4,8 +4,11 @@
  * The file d3_graph.css is a css file to providing styling for the D3
  *  charts.
  *
- * version 3.03
- * February 28, 2024
+ $Id: /var/www/html/habs/css/usgs/d3_graph.css, v 3.04 2025/04/22 09:31:14 llorzol Exp $
+ $Revision: 3.04 $
+ $Date: 2025/04/22 09:31:14 $
+ $Author: llorzol $
+ *
  */
 
 /*
@@ -106,14 +109,6 @@ body {
    color: black;
    font-family: Verdana;
    font-size: 9px;
-  }
-
-.x_axis_label
-  {
-   color: black;
-   font-family: Verdana;
-   font-weight: bold;
-   font-size: 12px;
   }
 
 .y_axis_label
